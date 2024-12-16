@@ -46,6 +46,3 @@ function unpack(io::IO, ::AnyFormat)
   return unpack(io, fmt)
 end
 
-format(::Type{Any}) = AnyFormat()
-construct(::Type{Any}, val, ::AnyFormat) = val
-

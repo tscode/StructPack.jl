@@ -1,13 +1,9 @@
 
-#
-# Auxiliary struct for valuetype injection
-#
-# Currently used for ArrayFormat
-#
-
 """
 Auxiliary structure that can be used to inject the [`valuetype`](@ref) method of
 some type into a call to [`unpack`](@ref).
+
+Currently needed by [`ArrayFormat`](@ref).
 """
 struct ValueTypeOf{T}
   value::Any
@@ -44,11 +40,6 @@ function unpack(io::IO, ::Type{T}, ::BinVectorFormat)::T where {T}
   return construct(T, bytes, BinVectorFormat())
 end
 
-function construct(::Type{Vector{F}}, bytes, ::BinVectorFormat) where {F}
-  vals = reinterpret(F, bytes)
-  return convert(Vector{F}, vals)
-end
-
 #
 # Array format
 #
@@ -82,15 +73,6 @@ function unpack(io::IO, ::Type{T}, ::ArrayFormat)::T where {T}
   return construct(T, val, ArrayFormat())
 end
 
-# ND Array support
-
-format(::Type{<:AbstractArray}) = ArrayFormat()
-
-function construct(::Type{T}, val, ::ArrayFormat) where {T <: AbstractArray}
-  data = collect(val.data)
-  return convert(T, reshape(data, val.size...))
-end
-
 #
 # BinArrayFormat
 #
@@ -101,7 +83,7 @@ end
 struct BinArrayFormat <: Format end
 
 struct BinArrayValue{T}
-  datatype::Symbol
+  datatype::Symbol   # Not checked during construction of arrays
   size::Vector{Int}
   data::T
 end
@@ -121,15 +103,5 @@ end
 function unpack(io::IO, ::Type{T}, ::BinArrayFormat)::T where {T}
   val = unpack(io, BinArrayValue{Vector{UInt8}})
   return construct(T, val, BinArrayFormat())
-end
-
-# ND Array support
-function construct(
-  ::Type{T},
-  val,
-  ::BinArrayFormat,
-) where {F, T <: AbstractArray{F}}
-  data = reinterpret(F, val.data)
-  return convert(T, reshape(data, val.size...))
 end
 

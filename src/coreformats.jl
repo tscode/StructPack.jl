@@ -1,8 +1,8 @@
 
 """
-Primitive format.
+Core format.
 
-All primitive formats have a low-level implementation that complies with one or
+All core formats have a low-level implementation that complies with one or
 more specific formats of the msgpack specification.
 
 Currently implemented are the following:
@@ -15,15 +15,15 @@ Currently implemented are the following:
 - [`MapFormat`](@ref) (msgpack fixmap, map 16, map 32)
 - [`BinaryFormat`](@ref) (msgpack bin 16, bin 32)
 """
-abstract type PrimitiveFormat <: Format end
+abstract type CoreFormat <: Format end
 
 """
     isformatbyte(byte, format::Format)
 
 Check if `byte` is compatible with `format`.
 """
-function isformatbyte(byte, ::PrimitiveFormat)
-  return error("No format byte is specified for this primitive format")
+function isformatbyte(byte, ::CoreFormat)
+  return error("No format byte is specified for this core format")
 end
 
 """
@@ -37,7 +37,7 @@ function byteerror(byte, ::F) where {F <: Format}
 end
 
 """
-Primitive format for packing nil / nothing values.
+Core format for packing nil / nothing values.
 
 ### Packing
 All types can be packed in `NilFormat`.
@@ -63,7 +63,7 @@ or
 to make `NilFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct NilFormat <: PrimitiveFormat end
+struct NilFormat <: CoreFormat end
 
 function isformatbyte(byte, ::NilFormat)
   return byte == 0xc0
@@ -86,11 +86,8 @@ end
 # Default constructor
 construct(::Type{T}, ::Nothing, ::NilFormat) where {T} = T()
 
-format(::Type{Nothing}) = NilFormat()
-construct(::Type{Nothing}, ::Nothing, ::NilFormat) = nothing
-
 """
-Primitive format for packing boolean values.
+Core format for packing boolean values.
 
 Built upon the msgpack format `boolean`.
 
@@ -118,7 +115,7 @@ or
 to make `BoolFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct BoolFormat <: PrimitiveFormat end
+struct BoolFormat <: CoreFormat end
 
 function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
@@ -144,10 +141,8 @@ function unpack(io::IO, ::BoolFormat)::Bool
   end
 end
 
-format(::Type{Bool}) = BoolFormat()
-
 """
-Primitive format for packing signed integer values.
+Core format for packing signed integer values.
 
 Built upon the msgpack formats `negative fixint`, `positive fixint`,
 `signed 8`, `signed 16`, `signed 32`, `signed 64`.
@@ -176,7 +171,7 @@ or
 to make `SignedFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct SignedFormat <: PrimitiveFormat end
+struct SignedFormat <: CoreFormat end
 
 function isformatbyte(byte, ::SignedFormat)
   return byte <= 0x7f ||  # positive fixint
@@ -236,11 +231,10 @@ function unpack(io::IO, ::SignedFormat)::Int64
   end
 end
 
-format(::Type{<:Signed}) = SignedFormat()
 destruct(value, ::SignedFormat) = Base.signed(value)
 
 """
-Primitive format for packing unsigned integer values.
+Core format for packing unsigned integer values.
 
 Built upon the msgpack formats `positive fixint`, `unsigned 8`, `unsigned
 16`, `unsigned 32`, `unsigned 64`.
@@ -269,7 +263,7 @@ or
 to make `UnsignedFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct UnsignedFormat <: PrimitiveFormat end
+struct UnsignedFormat <: CoreFormat end
 
 function isformatbyte(byte, ::UnsignedFormat)
   return byte <= 0x7f ||  # positive fixint
@@ -315,11 +309,10 @@ function unpack(io::IO, ::UnsignedFormat)::UInt64
   end
 end
 
-format(::Type{<:Unsigned}) = UnsignedFormat()
 destruct(x, ::UnsignedFormat) = Base.unsigned(x)
 
 """
-Primitive format for packing float values.
+Core format for packing float values.
 
 Built upon the msgpack formats `float 32`, `float 64`.
 
@@ -347,7 +340,7 @@ or
 to make `FloatFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct FloatFormat <: PrimitiveFormat end
+struct FloatFormat <: CoreFormat end
 
 function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
@@ -376,11 +369,10 @@ function unpack(io::IO, ::FloatFormat)::Float64
   end
 end
 
-format(::Type{<:AbstractFloat}) = FloatFormat()
 destruct(value, ::FloatFormat) = Base.float(value)
 
 """
-Primitive format for packing string values.
+Core format for packing string values.
 
 Built upon the msgpack formats `fixstr`, `str 8`, `str 16`, `str 32`.
 
@@ -412,7 +404,7 @@ or
 to make `StringFormat` the default format for type `T` (if `T` is abstract, use
 `{<: T}` to cover all subtypes).
 """
-struct StringFormat <: PrimitiveFormat end
+struct StringFormat <: CoreFormat end
 
 function isformatbyte(byte, ::StringFormat)
   return 0xa0 <= byte <= 0xbf || # fixstr
@@ -460,13 +452,8 @@ end
 destruct(value, ::StringFormat) = Base.string(value)
 construct(::Type{T}, x, ::StringFormat) where {T} = convert(T, x)
 
-# String / Symbol support
-format(::Type{<:AbstractString}) = StringFormat()
-format(::Type{Symbol}) = StringFormat()
-construct(::Type{Symbol}, x, ::StringFormat) = Symbol(x)
-
 """
-Primitive format for packing binary values.
+Core format for packing binary values.
 
 Built upon the msgpack formats `bin 8`, `bin 16`, `bin 32`.
 
@@ -537,36 +524,7 @@ function unpack(io::IO, ::BinaryFormat)::Vector{UInt8}
 end
 
 """
-Wrapper of `Vector{UInt8}` that implements [`BinaryFormat`](@ref).
-"""
-struct Bytes
-  bytes::Vector{UInt8}
-end
-
-destruct(x::Bytes, ::BinaryFormat) = x.bytes
-construct(::Type{Bytes}, bytes, ::BinaryFormat) = Bytes(bytes)
-
-#
-# Vector support for bitstype elements
-#
-
-function destruct(value::Vector{F}, ::BinaryFormat) where {F}
-  @assert isbitstype(F) """
-  Only vectors with bitstype elements can be packed in BinaryFormat.
-  """
-  return value
-end
-
-function construct(::Type{Vector{F}}, bytes, ::BinaryFormat) where {F}
-  @assert isbitstype(F) """
-  Only vectors with bitstype elements can be unpacked in BinaryFormat.
-  """
-  value = reinterpret(F, bytes)
-  return convert(Vector{F}, value)
-end
-
-"""
-Primitive format for packing vector values.
+Core format for packing vector values.
 
 Built upon the msgpack formats `fixarray`, `array 16`, `array 32`.
 
@@ -623,8 +581,12 @@ function pack(io::IO, value::T, ::VectorFormat)::Nothing where {T}
   else
     ArgumentError("invalid array length $n") |> throw
   end
+  # @show typeof(value)
+  # @show typeof(val)
   for (index, x) in enumerate(val)
     fmt = valueformat(T, index)
+    # @show typeof(x)
+    # @show fmt
     pack(io, x, fmt)
   end
   return nothing
@@ -665,38 +627,8 @@ function unpack(io::IO, ::Type{T}, ::VectorFormat)::T where {T}
   return construct(T, values, VectorFormat())
 end
 
-# Struct support (default MapFormat)
-
-function destruct(value::T, ::VectorFormat) where {T}
-  n = Base.fieldcount(T)
-  Iterators.map(1:n) do index
-    return Base.getfield(value, index)
-  end
-end
-
-construct(::Type{T}, vals, ::VectorFormat) where {T} = T(vals...)
-
-# Tuple support (default)
-
-format(::Type{<:Tuple}) = VectorFormat()
-
-function construct(::Type{T}, vals, ::VectorFormat) where {T <: Tuple}
-  return convert(T, (vals...,))
-end
-
-# Abstract vector support (default)
-
-format(::Type{<:AbstractVector}) = VectorFormat()
-destruct(value::AbstractArray, ::VectorFormat) = value
-
-function construct(::Type{T}, vals, ::VectorFormat) where {T <: AbstractVector}
-  return convert(T, collect(vals))
-end
-
-valuetype(::Type{T}, _) where {T <: AbstractArray} = eltype(T)
-
 """
-Primitive format for packing map / dictionary values.
+Core format for packing map / dictionary values.
 
 Built upon the msgpack formats `fixmap`, `map 16`, `map 32`.
 
@@ -805,40 +737,3 @@ function unpack(io::IO, ::Type{T}, ::MapFormat)::T where {T}
   end
   return construct(T, pairs, MapFormat())
 end
-
-# Generic struct support
-function destruct(value::T, ::MapFormat) where {T}
-  n = Base.fieldcount(T)
-  Iterators.map(1:n) do index
-    key = Base.fieldname(T, index)
-    val = Base.getfield(value, index)
-    return (key, val)
-  end
-end
-
-function construct(::Type{T}, pairs, ::MapFormat) where {T}
-  values = Iterators.map(last, pairs)
-  return T(values...)
-end
-
-# NamedTuple support (default)
-format(::Type{<:NamedTuple}) = MapFormat()
-
-function construct(::Type{T}, pairs, ::MapFormat) where {T <: NamedTuple}
-  values = Iterators.map(last, pairs)
-  return T(values)
-end
-
-# Pair support (default)
-format(::Type{<:Pair}) = MapFormat()
-destruct(value::Pair, ::MapFormat) = (value,)
-construct(P::Type{<:Pair}, pair, ::MapFormat) = P(first(pair)...)
-keytype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = K
-valuetype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = V
-
-# Dict support (default)
-format(::Type{<:AbstractDict}) = MapFormat()
-destruct(value::AbstractDict, ::MapFormat) = value
-construct(D::Type{<:AbstractDict}, pairs, ::MapFormat) = D(pairs)
-keytype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = K
-valuetype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = V

@@ -3,13 +3,13 @@ using Pack
 using Test
 using Random
 
-function packcycle(value, T = typeof(value), isequal = isequal)
+function packcycle(value, T = typeof(value); isequal = isequal, fmt = Pack.DefaultFormat())
   bytes = Pack.pack(value)
   uvalue = Pack.unpack(bytes, T)
   return isequal(value, uvalue) && all(bytes .== Pack.pack(uvalue))
 end
 
-@testset "Primitives" begin
+@testset "CoreFormats" begin
 
   @testset "Nothing" begin
     @test packcycle(nothing)
@@ -58,5 +58,26 @@ end
   @testset "NamedTuple" begin
     @test packcycle((a = "named", b = "tuple", length = 3, tup = (5, 4)))
   end
+
 end
 
+@testset "BinArrays" begin
+  for F in [Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64]
+    for data in [rand(F, 5), rand(F, 1000)]
+      for fmt in [Pack.VectorFormat(), Pack.BinVectorFormat(), Pack.ArrayFormat(), Pack.BinArrayFormat()]
+        @test packcycle(data, fmt = fmt)
+      end
+    end
+    for data in [rand(F, 5, 5), rand(F, 100, 100)]
+      for fmt in [Pack.ArrayFormat(), Pack.BinArrayFormat()]
+        @test packcycle(data, fmt = fmt)
+      end
+    end
+  end
+
+  for data in [BitArray(undef, 5, 5), BitArray(undef, 100, 100)]
+    for fmt in [Pack.ArrayFormat(), Pack.BinArrayFormat()]
+      @test packcycle(data, fmt = fmt)
+    end
+  end
+end
