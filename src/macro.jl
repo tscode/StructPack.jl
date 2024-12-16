@@ -135,6 +135,10 @@ end
 # main macro
 #
 
+##
+## TODO: Repair @pack RGBA{Float64} in MapFormat
+##
+
 """
     @pack T [in format] [field format customization] [field selection]
 """

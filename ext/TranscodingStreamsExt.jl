@@ -2,6 +2,7 @@
 module TranscodingStreamsExt
 
 import Pack: pack, unpack
+import Pack: Format, StreamFormat
 import TranscodingStreams: TranscodingStream, TOKEN_END
 
 function pack(

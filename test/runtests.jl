@@ -51,6 +51,10 @@ end
     @test packcycle((:this, :is, "a tuple", (:with, true, :numbers), 5))
   end
 
+  @testset "Pair" begin
+    @test packcycle((:this => 5, :is => 3, "a tuple" => "good"))
+  end
+
   @testset "NamedTuple" begin
     @test packcycle((a = "named", b = "tuple", length = 3, tup = (5, 4)))
   end

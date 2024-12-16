@@ -678,19 +678,13 @@ construct(::Type{T}, vals, ::VectorFormat) where {T} = T(vals...)
 
 # Tuple support (default)
 
-format(::Type{<:T}) where {T <: Tuple} = VectorFormat()
+format(::Type{<:Tuple}) = VectorFormat()
 
 function construct(::Type{T}, vals, ::VectorFormat) where {T <: Tuple}
   return convert(T, (vals...,))
 end
 
-# NamedTuple support (default MapFormat)
-
-function construct(::Type{T}, vals, ::VectorFormat) where {T <: NamedTuple}
-  return T(vals)
-end
-
-# Vector support (default)
+# Abstract vector support (default)
 
 format(::Type{<:AbstractVector}) = VectorFormat()
 destruct(value::AbstractArray, ::VectorFormat) = value
@@ -835,9 +829,16 @@ function construct(::Type{T}, pairs, ::MapFormat) where {T <: NamedTuple}
   return T(values)
 end
 
+# Pair support (default)
+format(::Type{<:Pair}) = MapFormat()
+destruct(value::Pair, ::MapFormat) = (value,)
+construct(P::Type{<:Pair}, pair, ::MapFormat) = P(first(pair)...)
+keytype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = K
+valuetype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = V
+
 # Dict support (default)
-format(::Type{<:Dict}) = MapFormat()
-destruct(value::Dict, ::MapFormat) = value
-construct(::Type{<:Dict}, pairs, ::MapFormat) = Dict(pairs)
-keytype(::Type{<:Dict{K, V}}, _) where {K, V} = K
-valuetype(::Type{<:Dict{K, V}}, _) where {K, V} = V
+format(::Type{<:AbstractDict}) = MapFormat()
+destruct(value::AbstractDict, ::MapFormat) = value
+construct(D::Type{<:AbstractDict}, pairs, ::MapFormat) = D(pairs)
+keytype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = K
+valuetype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = V
