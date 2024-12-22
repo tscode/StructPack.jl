@@ -33,8 +33,12 @@ function construct(::Type{T}, vals, ::VectorFormat) where {T <: Tuple}
   return convert(T, (vals...,))
 end
 
+valuetype(::Type{NTuple{N, T}}, vals) where {N, T} = T
+
 # Pack {<: NamedTuple} in MapFormat by default
 format(::Type{<:NamedTuple}) = MapFormat()
+
+destruct(val::NamedTuple, ::MapFormat) = pairs(val)
 
 function construct(::Type{T}, pairs, ::MapFormat) where {T <: NamedTuple}
   values = Iterators.map(last, pairs)
@@ -44,16 +48,16 @@ end
 # Pack {<:Pair} in MapFormat by default
 format(::Type{<:Pair}) = MapFormat()
 destruct(value::Pair, ::MapFormat) = (value,)
-construct(P::Type{<:Pair}, pair, ::MapFormat) = P(first(pair)...)
-keytype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = K
-valuetype(::Type{P}, _) where {K, V, P <: Pair{K, V}} = V
+construct(P::Type{<:Pair}, pair, ::MapFormat) = convert(P, first(pair))
+keytype(::Type{P}, ::MapFormat, _) where {K, V, P <: Pair{K, V}} = K
+valuetype(::Type{P}, ::MapFormat, _) where {K, V, P <: Pair{K, V}} = V
 
 # Pack {<: AbstractDict} in MapFormat by default
 format(::Type{<:AbstractDict}) = MapFormat()
 destruct(value::AbstractDict, ::MapFormat) = value
 construct(D::Type{<:AbstractDict}, pairs, ::MapFormat) = D(pairs)
-keytype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = K
-valuetype(::Type{<:AbstractDict{K, V}}, _) where {K, V} = V
+keytype(::Type{<:AbstractDict{K, V}}, ::MapFormat, _) where {K, V} = K
+valuetype(::Type{<:AbstractDict{K, V}}, ::MapFormat, _) where {K, V} = V
 
 #
 # Generic structs
@@ -67,7 +71,7 @@ function destruct(value::T, ::VectorFormat) where {T}
   end
 end
 
-construct(::Type{T}, vals, ::VectorFormat) where {T} = T(vals...)
+construct(T::Type, vals, ::VectorFormat) = T(vals...)
 
 # Support packing structs in MapFormat
 function destruct(value::T, ::MapFormat) where {T}
@@ -75,11 +79,11 @@ function destruct(value::T, ::MapFormat) where {T}
   Iterators.map(1:n) do index
     key = Base.fieldname(T, index)
     val = Base.getfield(value, index)
-    return (key, val)
+    return key=>val
   end
 end
 
-function construct(::Type{T}, pairs, ::MapFormat) where {T}
+function construct(T::Type, pairs, ::MapFormat)
   values = Iterators.map(last, pairs)
   return T(values...)
 end
@@ -96,7 +100,7 @@ function construct(::Type{T}, vals, ::VectorFormat) where {T <: AbstractVector}
   return convert(T, collect(vals))
 end
 
-valuetype(::Type{T}, _) where {T <: AbstractVector} = eltype(T)
+valuetype(::Type{<:AbstractVector{F}}, ::Format, _) where {F} = F
 
 # Support packing {<: Vector} in BinaryFormat for bitstype elements
 function destruct(value::Vector{F}, ::BinaryFormat) where {F}
@@ -121,6 +125,7 @@ function construct(::Type{Vector{F}}, bytes, ::BinVectorFormat) where {F}
 end
 
 format(::Type{<:BitVector}) = BinVectorFormat()
+# TODO: This currently copies the BitVector to a UInt8 vector
 destruct(value::BitVector, ::BinVectorFormat) = convert(Vector{UInt8}, value)
 
 function construct(::Type{<: BitVector}, val, ::BinVectorFormat)
@@ -133,12 +138,12 @@ end
 
 # Support packing AbstractArray in VectorFormat
 destruct(value::AbstractArray, ::VectorFormat) = value
-valuetype(::Type{T}, _) where {T <: AbstractArray} = eltype(T)
+valuetype(T::Type{<:AbstractArray}, ::Format, _) = eltype(T)
 
 # Pack {<: AbstractArray} in ArrayFormat by default
 format(::Type{<:AbstractArray}) = ArrayFormat()
 
-function construct(::Type{T}, val, ::ArrayFormat) where {T <: AbstractArray}
+function construct(T::Type{<:AbstractArray}, val, ::ArrayFormat)
   data = collect(val.data)
   return convert(T, reshape(data, val.size...))
 end
@@ -148,17 +153,17 @@ function construct(
   ::Type{T},
   val,
   ::BinArrayFormat,
-) where {F, T <: AbstractArray{F}}
+) where {F, T<:AbstractArray{F}}
   data = reinterpret(F, val.data)
   return convert(T, reshape(data, val.size...))
 end
 
 # Pack {<: BitArrays} in BinArrayFormat
-# TODO: This currently copies the bitarray to an UInt8 array
+# TODO: This currently copies the BitArray to a UInt8 array
 format(::Type{<:BitArray}) = BinArrayFormat()
 destruct(value::BitArray, ::BinArrayFormat) = convert(Array{UInt8}, value)
 
-function construct(::Type{<: BitArray}, val, ::BinArrayFormat)
+function construct(::Type{<:BitArray}, val, ::BinArrayFormat)
   return BitArray(reshape(val.data, val.size...))
 end
 

@@ -41,8 +41,8 @@ end
 
 pack(io::IO, value, ::AnyFormat) = pack(io, value)
 
-function unpack(io::IO, ::AnyFormat)
+function unpack(io::IO, ::AnyFormat, scope::DefaultScope = DefaultScope())
   fmt = peekformat(io)
-  return unpack(io, fmt)
+  return unpack(io, fmt, DefaultScope())
 end
 

@@ -2,10 +2,11 @@
 """
 Core format.
 
-All core formats have a low-level implementation that complies with one or
-more specific formats of the msgpack specification.
+All core packing formats have a low-level implementation that complies with one
+or more formats of the msgpack specification.
 
-Currently implemented are the following:
+The following core formats are supported out of the box:
+
 - [`NilFormat`](@ref) (msgpack nil)
 - [`BoolFormat`](@ref) (msgpack boolean)
 - [`SignedFormat`](@ref) (msgpack negative / positive fixint, signed 8-64)
@@ -69,12 +70,12 @@ function isformatbyte(byte, ::NilFormat)
   return byte == 0xc0
 end
 
-function pack(io::IO, value, ::NilFormat)::Nothing
+function pack(io::IO, value, ::NilFormat, ::Scope)::Nothing
   write(io, 0xc0)
   return nothing
 end
 
-function unpack(io::IO, ::NilFormat)::Nothing
+function unpack(io::IO, ::NilFormat, ::Scope)::Nothing
   byte = read(io, UInt8)
   if byte == 0xc0
     nothing
@@ -121,7 +122,7 @@ function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
 end
 
-function pack(io::IO, value, ::BoolFormat)::Nothing
+function pack(io::IO, value, ::BoolFormat, ::Scope)::Nothing
   if destruct(value, BoolFormat())
     write(io, 0xc3)
   else
@@ -130,7 +131,7 @@ function pack(io::IO, value, ::BoolFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BoolFormat)::Bool
+function unpack(io::IO, ::BoolFormat, ::Scope)::Bool
   byte = read(io, UInt8)
   if byte == 0xc3
     true
@@ -179,7 +180,7 @@ function isformatbyte(byte, ::SignedFormat)
          0xd0 <= byte <= 0xd3 # signed 8 to 64
 end
 
-function pack(io::IO, value, ::SignedFormat)::Nothing
+function pack(io::IO, value, ::SignedFormat, ::Scope)::Nothing
   x = destruct(value, SignedFormat())
   if -32 <= x < 0 # negative fixint
     write(io, reinterpret(UInt8, Int8(x)))
@@ -203,7 +204,7 @@ function pack(io::IO, value, ::SignedFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::SignedFormat)::Int64
+function unpack(io::IO, ::SignedFormat, ::Scope)::Int64
   byte = read(io, UInt8)
   if byte >= 0xe0 # negative fixint
     reinterpret(Int8, byte)
@@ -217,7 +218,7 @@ function unpack(io::IO, ::SignedFormat)::Int64
     read(io, Int32) |> ntoh
   elseif byte == 0xd3 # signed 64
     read(io, Int64) |> ntoh
-    # For compability, also read unsigned values when signed is expected
+  # For compability, also read unsigned values when signed is expected
   elseif byte == 0xcc # unsigned 8
     read(io, UInt8)
   elseif byte == 0xcd # unsigned 16
@@ -270,7 +271,7 @@ function isformatbyte(byte, ::UnsignedFormat)
          0xcc <= byte <= 0xcf # unsigned 8 to 64
 end
 
-function pack(io::IO, value, ::UnsignedFormat)::Nothing
+function pack(io::IO, value, ::UnsignedFormat, ::Scope)::Nothing
   x = destruct(value, UnsignedFormat())
   if x < 128 # positive fixint
     write(io, UInt8(x))
@@ -292,7 +293,7 @@ function pack(io::IO, value, ::UnsignedFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::UnsignedFormat)::UInt64
+function unpack(io::IO, ::UnsignedFormat, ::Scope)::UInt64
   byte = read(io, UInt8)
   if byte < 128 # positive fixint
     byte
@@ -346,7 +347,7 @@ function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
 end
 
-function pack(io::IO, value, ::FloatFormat)::Nothing
+function pack(io::IO, value, ::FloatFormat, ::Scope)::Nothing
   val = destruct(value, FloatFormat())
   if isa(val, Float16) || isa(val, Float32) # float 32
     write(io, 0xca)
@@ -358,7 +359,7 @@ function pack(io::IO, value, ::FloatFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::FloatFormat)::Float64
+function unpack(io::IO, ::FloatFormat, ::Scope)::Float64
   byte = read(io, UInt8)
   if byte == 0xca ## float 32
     read(io, Float32) |> ntoh
@@ -411,7 +412,7 @@ function isformatbyte(byte, ::StringFormat)
          0xd9 <= byte <= 0xdb # str 8 to 32
 end
 
-function pack(io::IO, value, ::StringFormat)::Nothing
+function pack(io::IO, value, ::StringFormat, ::Scope)::Nothing
   str = destruct(value, StringFormat())
   n = sizeof(str)
   if n < 32 # fixstr format
@@ -432,7 +433,7 @@ function pack(io::IO, value, ::StringFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::StringFormat)::String
+function unpack(io::IO, ::StringFormat, ::Scope)::String
   byte = read(io, UInt8)
   n = if 0xa0 <= byte <= 0xbf # fixstr  format
     byte & 0x1f
@@ -490,7 +491,7 @@ function isformatbyte(byte, ::BinaryFormat)
   return 0xc4 <= byte <= 0xc6
 end
 
-function pack(io::IO, value, ::BinaryFormat)::Nothing
+function pack(io::IO, value, ::BinaryFormat, ::Scope)::Nothing
   bin = destruct(value, BinaryFormat())
   n = sizeof(bin)
   if n <= typemax(UInt8) # bin8
@@ -509,7 +510,7 @@ function pack(io::IO, value, ::BinaryFormat)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BinaryFormat)::Vector{UInt8}
+function unpack(io::IO, ::BinaryFormat, ::Scope)::Vector{UInt8}
   byte = read(io, UInt8)
   n = if byte == 0xc4 # bin8
     read(io, UInt8)
@@ -535,16 +536,15 @@ To support packing a value `val` of type `T` in `VectorFormat`, implement
 
 where the returned value `ret::R` must implement `length(ret)` (number of
 entries) and must be iterable. The formats of the entries of `val` are
-determined via [`Pack.valueformat`](@ref).
+determined via [`valueformat`](@ref).
 
 ### Unpacking
 To support unpacking a value of type `T` packed in `VectorFormat`, implement
   
-    construct(::Type{T}, ::Generator, ::VectorFormat)::T
+    construct(::Type{T}, ::Generator{T}, ::VectorFormat)::T
 
-or make sure that the constructor `T(:: Generator)` is defined.
-The entries placed into the generator are unpacked with type determined by
-[`Pack.valuetype`](@ref) and format determined by [`Pack.valueformat`](@ref).
+or make sure that the constructor `T(::Generator{T})` is defined (see
+[`Generator`](@ref)).
 
 ### Defaults
 `VectorFormat` is the default format for subtypes of `Tuple` and
@@ -567,8 +567,8 @@ function isformatbyte(byte, ::VectorFormat)
          byte == 0xdd # array 32
 end
 
-function pack(io::IO, value::T, ::VectorFormat)::Nothing where {T}
-  val = destruct(value, VectorFormat())
+function pack(io::IO, value::T, fmt::VectorFormat, scope::Scope) where {T}
+  val = destruct(value, fmt, scope)
   n = length(val)
   if n < 16 # fixarray
     write(io, 0x90 | UInt8(n))
@@ -581,34 +581,39 @@ function pack(io::IO, value::T, ::VectorFormat)::Nothing where {T}
   else
     ArgumentError("invalid array length $n") |> throw
   end
-  # @show typeof(value)
-  # @show typeof(val)
-  for (index, x) in enumerate(val)
-    fmt = valueformat(T, index)
-    # @show typeof(x)
-    # @show fmt
-    pack(io, x, fmt)
+  state = iterstate(T, fmt, scope)
+  for entry in val
+    fmt = valueformat(T, fmt, state, scope)
+    pack(io, entry, fmt, scope)
+    state = iterstate(T, fmt, state, entry, scope)
   end
   return nothing
 end
 
-function unpack(io::IO, ::VectorFormat)::Vector
+function unpack(io::IO, T::Type, fmt::VectorFormat, scope::Scope)::T
   byte = read(io, UInt8)
   n = if byte & 0xf0 == 0x90 # fixarray
-    byte & 0x0f
+    Int(byte & 0x0f)
   elseif byte == 0xdc # array 16
-    read(io, UInt16) |> ntoh
+    Int(read(io, UInt16) |> ntoh)
   elseif byte == 0xdd # array 32
-    read(io, UInt32) |> ntoh
+    Int(read(io, UInt32) |> ntoh)
   else
-    byteerror(byte, VectorFormat())
+    byteerror(byte, fmt)
   end
-  map(1:n) do _
-    return unpack(io, AnyFormat())
+  state = iterstate(T, fmt, scope)
+  entries = Iterators.map(1:n) do state
+    S = valuetype(T, fmt, state, scope)
+    fmt_val = valueformat(T, fmt, state, scope)
+    entry = unpack(io, S, fmt_val, scope)
+    state = iterstate(T, fmt_val, state, entry, scope)
+    return entry
   end
+  return construct(T, Generator{T}(entries), fmt, scope)
 end
 
-function unpack(io::IO, ::Type{T}, ::VectorFormat)::T where {T}
+# Support for generic unpacking / AnyFormat
+function unpack(io::IO, ::VectorFormat, scope::Scope)::Vector
   byte = read(io, UInt8)
   n = if byte & 0xf0 == 0x90 # fixarray
     byte & 0x0f
@@ -619,13 +624,12 @@ function unpack(io::IO, ::Type{T}, ::VectorFormat)::T where {T}
   else
     byteerror(byte, VectorFormat())
   end
-  values = Iterators.map(1:n) do index
-    S = valuetype(T, index)
-    fmt = valueformat(T, index)
-    return unpack(io, S, fmt)
+  values = map(1:n) do _
+    return unpack(io, AnyFormat(), scope)
   end
-  return construct(T, values, VectorFormat())
+  return values
 end
+
 
 """
 Core format for packing map / dictionary values.
@@ -639,22 +643,21 @@ To support packing a value `val` of type `T` in `MapFormat`, implement
 
 where the returned value `ret::R` must implement `length(ret)` (number of
 entries) and must be iterable with pairs as entries. The key / value formats
-of the entries of `val` are determined via [`Pack.keyformat`](@ref) and
-[`Pack.valueformat`](@ref).
+of the entries of `val` are determined via [`keyformat`](@ref) and
+[`valueformat`](@ref).
 
 ### Unpacking
 To support unpacking a value of type `T` packed in `MapFormat`, implement
   
-    construct(::Type{T}, ::Generator, ::VectorFormat)::T
+    construct(::Type{T}, ::Generator{T}, ::MapFormat)::T
 
-or make sure that the constructor `T(:: Generator)` is defined.
-The key-value pairs placed into the generator are unpacked with type determined
-by [`Pack.keytype`](@ref) and [`Pack.valuetype`](@ref), and format determined by
-[`Pack.keyformat`](@ref) and [`Pack.valueformat`](@ref).
+or make sure that the constructor `T(::Generator{T})` is defined (see
+[`Generator`](@ref)). During unpacking, the respective formats are determined
+via [`keyformat`](@ref) and [`valueformat`](@ref) while the types of the entries
+to be unpacked are gathered via [`keytype`](@ref) and [`valuetype`](@ref).
 
 ### Defaults
-`MapFormat` is the default format for subtypes of `NamedTuple` and
-`Dict`. Use
+`MapFormat` is the default format for subtypes of `NamedTuple` and `Dict`. Use
 
     format(::Type{T}) = MapFormat()
 
@@ -673,8 +676,8 @@ function isformatbyte(byte, ::MapFormat)
          byte == 0xdf # map 32
 end
 
-function pack(io::IO, value::T, ::MapFormat)::Nothing where {T}
-  val = destruct(value, MapFormat())
+function pack(io::IO, value::T, fmt::MapFormat, scope::Scope) where {T}
+  val = destruct(value, fmt, scope)
   n = length(val)
   if n < 16 # fixmap
     write(io, 0x80 | UInt8(n))
@@ -687,16 +690,45 @@ function pack(io::IO, value::T, ::MapFormat)::Nothing where {T}
   else
     ArgumentError("invalid map length $n") |> throw
   end
-  for (index, (key, val)) in enumerate(val)
-    fmt_key = keyformat(T, index)
-    fmt_val = valueformat(T, index)
-    pack(io, key, fmt_key)
-    pack(io, val, fmt_val)
+  state = iterstate(T, fmt, scope)
+  for entry in val
+    fmt_key = keyformat(T, fmt, state, scope)
+    fmt_val = valueformat(T, fmt, state, scope)
+    pack(io, first(entry), fmt_key, scope)
+    pack(io, last(entry), fmt_val, scope)
+    state = iterstate(T, fmt, state, entry, scope)
   end
   return nothing
 end
 
-function unpack(io::IO, ::MapFormat)::Dict
+function unpack(io::IO, T::Type, fmt::MapFormat, scope::Scope)::T
+  byte = read(io, UInt8)
+  n = if byte & 0xf0 == 0x80
+    byte & 0x0f
+  elseif byte == 0xde
+    read(io, UInt16) |> ntoh
+  elseif byte == 0xdf
+    read(io, UInt32) |> ntoh
+  else
+    byteerror(byte, fmt)
+  end
+  state = iterstate(T, fmt, scope)
+  pairs = Iterators.map(1:n) do _
+    K = keytype(T, fmt, state, scope)
+    V = valuetype(T, fmt, state, scope)
+    fmt_key = keyformat(T, fmt, state, scope)
+    fmt_val = valueformat(T, fmt, state, scope)
+    key = unpack(io, K, fmt_key, scope)
+    value = unpack(io, V, fmt_val, scope)
+    entry = key=>value
+    state = iterstate(T, fmt, state, entry, scope)
+    return entry
+  end
+  return construct(T, Generator{T}(pairs), MapFormat(), scope)
+end
+
+# Support for generic unpacking / AnyFormat
+function unpack(io::IO, ::MapFormat, scope::Scope)::Dict
   byte = read(io, UInt8)
   n = if byte & 0xf0 == 0x80
     byte & 0x0f
@@ -708,32 +740,9 @@ function unpack(io::IO, ::MapFormat)::Dict
     byteerror(byte, MapFormat())
   end
   pairs = Iterators.map(1:n) do _
-    key = unpack(io, AnyFormat())
-    value = unpack(io, AnyFormat())
+    key = unpack(io, AnyFormat(), scope)
+    value = unpack(io, AnyFormat(), scope)
     return (key, value)
   end
   return Dict(pairs)
-end
-
-function unpack(io::IO, ::Type{T}, ::MapFormat)::T where {T}
-  byte = read(io, UInt8)
-  n = if byte & 0xf0 == 0x80
-    byte & 0x0f
-  elseif byte == 0xde
-    read(io, UInt16) |> ntoh
-  elseif byte == 0xdf
-    read(io, UInt32) |> ntoh
-  else
-    byteerror(byte, MapFormat())
-  end
-  pairs = Iterators.map(1:n) do index
-    K = keytype(T, index)
-    V = valuetype(T, index)
-    fmt_key = keyformat(T, index)
-    fmt_val = valueformat(T, index)
-    key = unpack(io, K, fmt_key)
-    value = unpack(io, V, fmt_val)
-    return (key, value)
-  end
-  return construct(T, pairs, MapFormat())
 end

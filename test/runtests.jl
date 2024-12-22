@@ -4,9 +4,24 @@ using Test
 using Random
 
 function packcycle(value, T = typeof(value); isequal = isequal, fmt = Pack.DefaultFormat())
-  bytes = Pack.pack(value)
-  uvalue = Pack.unpack(bytes, T)
-  return isequal(value, uvalue) && all(bytes .== Pack.pack(uvalue))
+  bytes = Pack.pack(value, fmt)
+  uvalue = Pack.unpack(bytes, T, fmt)
+  return isequal(value, uvalue) && all(bytes .== Pack.pack(uvalue, fmt))
+end
+
+@testset "AnyFormat" begin
+  val = Dict(
+    "a" => 5,
+    "b" => [1., 2., 3.],
+    "c" => true,
+    false => "some text",
+    nothing => -3,
+  )
+  bytes = Pack.pack(val)
+  val2 = Pack.unpack(bytes)
+  @test all(keys(val)) do key
+    val[key] == val2[key]
+  end
 end
 
 @testset "CoreFormats" begin
@@ -74,10 +89,28 @@ end
       end
     end
   end
-
   for data in [BitArray(undef, 5, 5), BitArray(undef, 100, 100)]
     for fmt in [Pack.ArrayFormat(), Pack.BinArrayFormat()]
       @test packcycle(data, fmt = fmt)
     end
   end
+end
+
+@testset "Struct" begin
+  struct A
+    a :: Nothing
+    b :: String
+    c :: Tuple{Int64, Float64}
+  end
+
+  val = A(nothing, "test", (10, 10.))
+
+  for fmt in [Pack.MapFormat(), Pack.VectorFormat()]
+    @test packcycle(val, fmt = fmt)
+  end
+
+  @test_throws ErrorException Pack.pack(val)
+
+  Pack.format(::Type{A}) = Pack.MapFormat()
+  @test packcycle(val)
 end
