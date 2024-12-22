@@ -112,11 +112,11 @@ struct TypeValue
   params::TypeParams
 end
 
-format(::Type{TypeValue}) = MapFormat()
-iterstate(::Type{TypeValue}, ::MapFormat) = []
-iterstate(::Type{TypeValue}, ::MapFormat, state, entry) = push!(state, entry[2])
+format(::Type{TypeValue}) = DynamicMapFormat()
+iterstate(::Type{TypeValue}, ::DynamicMapFormat) = []
+iterstate(::Type{TypeValue}, ::DynamicMapFormat, state, entry) = push!(state, entry[2])
 
-function valuetype(::Type{TypeValue}, ::MapFormat, state)
+function valuetype(::Type{TypeValue}, ::DynamicMapFormat, state)
   index = length(state) + 1
   if index == 3 # derive the type T (without type parameters) from name and path
     T = composetype(TypeValue(state..., TypeParams()))
@@ -125,20 +125,6 @@ function valuetype(::Type{TypeValue}, ::MapFormat, state)
     fieldtype(TypeValue, index)
   end
 end
-
-# # Needs custom unpack since TypeValue.params must be unpacked with knowledge
-# # of type T, which is stored in TypeValue.name and TypeValue.path
-# function unpack(io::IO, ::Type{TypeValue}, ::MapFormat, scope::Scope)
-#   keys = (:name, :path, :params)
-#   formats = [DefaultFormat() for _ in keys]
-#   values = unpackfixmap(io, keys, formats, scope) do key, vals
-#     key == :name ? Symbol : key == :path ? Vector{Symbol} : begin
-#       T = composetype(TypeValue(vals..., TypeParams()))
-#       TypeParams{T}
-#     end
-#   end
-#   return TypeValue(values...)
-# end
 
 """
     TypeValue(T::Type)
@@ -194,24 +180,24 @@ struct TypedValue{F}
   value::Any
 end
 
-format(::Type{<: TypedValue}) = MapFormat()
-iterstate(::Type{<: TypedValue}, ::MapFormat) = []
-iterstate(::Type{<: TypedValue}, ::MapFormat, state, entry) = push!(state, entry[2])
+format(::Type{<: TypedValue}) = DynamicMapFormat()
+iterstate(::Type{<: TypedValue}, ::DynamicMapFormat) = []
+iterstate(::Type{<: TypedValue}, ::DynamicMapFormat, state, entry) = push!(state, entry[2])
 
-function valueformat(::Type{TypedValue{F}}, ::MapFormat, state) where {F}
+function valueformat(::Type{TypedValue{F}}, ::DynamicMapFormat, state) where {F}
   return length(state) == 0 ? DefaultFormat() : F()
 end
 
-function valuetype(::Type{TypedValue{F}}, ::MapFormat, state) where {F}
+function valuetype(::Type{TypedValue{F}}, ::DynamicMapFormat, state) where {F}
   return length(state) == 0 ? TypeValue : composetype(state[1])
 end
 
 function pack(io::IO, value, ::TypedFormat{F}, scope::Scope) where {F <: Format}
-  pack(io, TypedValue{F}(value), MapFormat(), scope)
+  pack(io, TypedValue{F}(value), DynamicMapFormat(), scope)
 end
 
 function unpack(io::IO, T::Type, ::TypedFormat{F}, scope::Scope) where {F <: Format}
-  tval = unpack(io, TypedValue{F}, MapFormat(), scope)
+  tval = unpack(io, TypedValue{F}, DynamicMapFormat(), scope)
   @assert tval.value isa T """
   Expected value type $T when unpacking typed value. Found $(typeof(tval.value)).
   """

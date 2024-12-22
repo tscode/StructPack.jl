@@ -9,6 +9,7 @@ include("generator.jl")
 # Supported packing formats
 include("coreformats.jl")
 include("anyformat.jl")
+include("dynamicformats.jl")
 include("arrayformats.jl")
 include("typedformat.jl")
 include("extraformats.jl")

@@ -189,45 +189,6 @@ function unpack(io::IO, ::Type{T}, ::DefaultFormat, scope::Scope) where {T}
   return unpack(io, T, scope)
 end
 
-
-"""
-    iterstate(T::Type, fmt::Format [, scope::Scope])
-    
-Initialize a state object that is repeatedly updated while iterating over the
-entries of values of type `T` when packing and unpacking in format `fmt`.
-
-By default, the initial state is `1` and gets replaced by `state + 1` in
-subsequent updates.
-
-This function is only relevant for formats that make use of the methods
-[`keytype`](@ref), [`keyvalue`](@ref), [`valuetype`](@ref), or
-[`valueformat`](@ref), like [`VectorFormat`](@ref) and [`MapFormat`](@ref).
-"""
-iterstate(T::Type, ::Format) = 1 
-iterstate(T::Type, ::Format, state, entry) = state + 1
-
-"""
-    iterstate(T::Type, fmt::Format, state, entry [, scope::Scope])
-
-Return an update of the state object `state` when `T` is unpacked in the format
-`fmt`.
-
-The argument `entry` signifies the entry packed / unpacked in the last
-iteration and can be used to inform the next iteration state. It will be of
-type `valuetype(T, fmt, state, scope)` in case of [`VectorFormat`](@ref) and
-a key-value pair with types determined by [`keytype`](@ref) and [`valuetype`]
-(@ref) in case of [`MapFormat`](@ref).
-
-This approach enables 'dynamic' unpacking where the type / format of an entry
-depends on the values unpacked previously. The format [`TypedFormat`](@ref)
-exploits this pattern.
-"""
-iterstate(T::Type, fmt::Format, ::Scope) = iterstate(T, fmt)
-
-function iterstate(T::Type, fmt::Format, state, entry, ::Scope)
-  return iterstate(T, fmt, state, entry)
-end
-
 """
     keytype(T::Type, fmt::Format, state [, scope::Scope])::Type
 

@@ -581,16 +581,14 @@ function pack(io::IO, value::T, fmt::VectorFormat, scope::Scope) where {T}
   else
     ArgumentError("invalid array length $n") |> throw
   end
-  state = iterstate(T, fmt, scope)
-  for entry in val
-    fmt = valueformat(T, fmt, state, scope)
-    pack(io, entry, fmt, scope)
-    state = iterstate(T, fmt, state, entry, scope)
+  for (state, entry) in enumerate(val)
+    fmt_val = valueformat(T, fmt, state, scope)
+    pack(io, entry, fmt_val, scope)
   end
   return nothing
 end
 
-function unpack(io::IO, T::Type, fmt::VectorFormat, scope::Scope)::T
+function unpack(io::IO, ::Type{T}, fmt::VectorFormat, scope::Scope)::T where {T}
   byte = read(io, UInt8)
   n = if byte & 0xf0 == 0x90 # fixarray
     Int(byte & 0x0f)
@@ -601,12 +599,10 @@ function unpack(io::IO, T::Type, fmt::VectorFormat, scope::Scope)::T
   else
     byteerror(byte, fmt)
   end
-  state = iterstate(T, fmt, scope)
   entries = Iterators.map(1:n) do state
     S = valuetype(T, fmt, state, scope)
     fmt_val = valueformat(T, fmt, state, scope)
     entry = unpack(io, S, fmt_val, scope)
-    state = iterstate(T, fmt_val, state, entry, scope)
     return entry
   end
   return construct(T, Generator{T}(entries), fmt, scope)
@@ -701,7 +697,7 @@ function pack(io::IO, value::T, fmt::MapFormat, scope::Scope) where {T}
   return nothing
 end
 
-function unpack(io::IO, T::Type, fmt::MapFormat, scope::Scope)::T
+function unpack(io::IO, ::Type{T}, fmt::MapFormat, scope::Scope)::T where {T}
   byte = read(io, UInt8)
   n = if byte & 0xf0 == 0x80
     byte & 0x0f
@@ -712,8 +708,7 @@ function unpack(io::IO, T::Type, fmt::MapFormat, scope::Scope)::T
   else
     byteerror(byte, fmt)
   end
-  state = iterstate(T, fmt, scope)
-  pairs = Iterators.map(1:n) do _
+  pairs = Iterators.map(1:n) do state
     K = keytype(T, fmt, state, scope)
     V = valuetype(T, fmt, state, scope)
     fmt_key = keyformat(T, fmt, state, scope)
@@ -721,7 +716,6 @@ function unpack(io::IO, T::Type, fmt::MapFormat, scope::Scope)::T
     key = unpack(io, K, fmt_key, scope)
     value = unpack(io, V, fmt_val, scope)
     entry = key=>value
-    state = iterstate(T, fmt, state, entry, scope)
     return entry
   end
   return construct(T, Generator{T}(pairs), MapFormat(), scope)

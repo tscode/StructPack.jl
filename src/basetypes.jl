@@ -1,4 +1,8 @@
 
+const AnyVectorFormat = Union{VectorFormat, DynamicVectorFormat}
+const AnyMapFormat = Union{MapFormat, DynamicMapFormat}
+
+
 # Pack Any in AnyFormat by default
 format(::Type{Any}) = AnyFormat()
 construct(::Type{Any}, val, ::AnyFormat) = val
@@ -29,7 +33,7 @@ construct(::Type{Symbol}, x, ::StringFormat) = Symbol(x)
 # Pack {<: Tuple} in VectorFormat by default
 format(::Type{<:Tuple}) = VectorFormat()
 
-function construct(::Type{T}, vals, ::VectorFormat) where {T <: Tuple}
+function construct(::Type{T}, vals, ::AnyVectorFormat) where {T <: Tuple}
   return convert(T, (vals...,))
 end
 
@@ -38,43 +42,43 @@ valuetype(::Type{NTuple{N, T}}, vals) where {N, T} = T
 # Pack {<: NamedTuple} in MapFormat by default
 format(::Type{<:NamedTuple}) = MapFormat()
 
-destruct(val::NamedTuple, ::MapFormat) = pairs(val)
+destruct(val::NamedTuple, ::AnyMapFormat) = pairs(val)
 
-function construct(::Type{T}, pairs, ::MapFormat) where {T <: NamedTuple}
+function construct(::Type{T}, pairs, ::AnyMapFormat) where {T <: NamedTuple}
   values = Iterators.map(last, pairs)
   return T(values)
 end
 
 # Pack {<:Pair} in MapFormat by default
 format(::Type{<:Pair}) = MapFormat()
-destruct(value::Pair, ::MapFormat) = (value,)
-construct(P::Type{<:Pair}, pair, ::MapFormat) = convert(P, first(pair))
-keytype(::Type{P}, ::MapFormat, _) where {K, V, P <: Pair{K, V}} = K
-valuetype(::Type{P}, ::MapFormat, _) where {K, V, P <: Pair{K, V}} = V
+destruct(value::Pair, ::AnyMapFormat) = (value,)
+construct(P::Type{<:Pair}, pair, ::AnyMapFormat) = convert(P, first(pair))
+keytype(::Type{P}, ::AnyMapFormat, _) where {K, V, P <: Pair{K, V}} = K
+valuetype(::Type{P}, ::AnyMapFormat, _) where {K, V, P <: Pair{K, V}} = V
 
 # Pack {<: AbstractDict} in MapFormat by default
 format(::Type{<:AbstractDict}) = MapFormat()
-destruct(value::AbstractDict, ::MapFormat) = value
-construct(D::Type{<:AbstractDict}, pairs, ::MapFormat) = D(pairs)
-keytype(::Type{<:AbstractDict{K, V}}, ::MapFormat, _) where {K, V} = K
-valuetype(::Type{<:AbstractDict{K, V}}, ::MapFormat, _) where {K, V} = V
+destruct(value::AbstractDict, ::AnyMapFormat) = value
+construct(D::Type{<:AbstractDict}, pairs, ::AnyMapFormat) = D(pairs)
+keytype(::Type{<:AbstractDict{K, V}}, ::AnyMapFormat, _) where {K, V} = K
+valuetype(::Type{<:AbstractDict{K, V}}, ::AnyMapFormat, _) where {K, V} = V
 
 #
 # Generic structs
 #
 
 # Support packing structs in VectorFormat
-function destruct(value::T, ::VectorFormat) where {T}
+function destruct(value::T, ::AnyVectorFormat) where {T}
   n = Base.fieldcount(T)
   Iterators.map(1:n) do index
     return Base.getfield(value, index)
   end
 end
 
-construct(T::Type, vals, ::VectorFormat) = T(vals...)
+construct(T::Type, vals, ::AnyVectorFormat) = T(vals...)
 
 # Support packing structs in MapFormat
-function destruct(value::T, ::MapFormat) where {T}
+function destruct(value::T, ::AnyMapFormat) where {T}
   n = Base.fieldcount(T)
   Iterators.map(1:n) do index
     key = Base.fieldname(T, index)
@@ -83,7 +87,7 @@ function destruct(value::T, ::MapFormat) where {T}
   end
 end
 
-function construct(T::Type, pairs, ::MapFormat)
+function construct(T::Type, pairs, ::AnyMapFormat)
   values = Iterators.map(last, pairs)
   return T(values...)
 end
@@ -94,9 +98,9 @@ end
 
 # Pack {<: AbstractVector} in VectorFormat by default
 format(::Type{<:AbstractVector}) = VectorFormat()
-destruct(value::AbstractVector, ::VectorFormat) = value
+destruct(value::AbstractVector, ::AnyVectorFormat) = value
 
-function construct(::Type{T}, vals, ::VectorFormat) where {T <: AbstractVector}
+function construct(::Type{T}, vals, ::AnyVectorFormat) where {T <: AbstractVector}
   return convert(T, collect(vals))
 end
 
@@ -137,7 +141,7 @@ end
 #
 
 # Support packing AbstractArray in VectorFormat
-destruct(value::AbstractArray, ::VectorFormat) = value
+destruct(value::AbstractArray, ::AnyVectorFormat) = value
 valuetype(T::Type{<:AbstractArray}, ::Format, _) = eltype(T)
 
 # Pack {<: AbstractArray} in ArrayFormat by default
