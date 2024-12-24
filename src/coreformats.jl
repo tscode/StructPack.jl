@@ -19,7 +19,7 @@ The following core formats are supported out of the box:
 abstract type CoreFormat <: Format end
 
 """
-    isformatbyte(byte, format::Format)
+    isformatbyte(byte, format::CoreFormat)
 
 Check if `byte` is compatible with `format`.
 """
@@ -40,19 +40,9 @@ end
 """
 Core format for packing nil / nothing values.
 
-### Packing
-All types can be packed in `NilFormat`.
-
 Built upon the msgpack format `nil`.
 
-### Unpacking
-To support unpacking a value of type `T` packed in `NilFormat`, implement
-  
-    construct(::Type{T}, ::Nothing, ::NilFormat)::T
-
-or make sure that the constructor `T()` is defined.
-
-### Defaults
+## Defaults
 `NilFormat` is the default format of `Nothing`. Use
 
     format(::Type{T}) = NilFormat()
@@ -61,8 +51,18 @@ or
 
     @pack T in NilFormat
 
-to make `NilFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `NilFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+All types can be packed in `NilFormat`.
+
+## Unpacking
+To support unpacking values of type `T` packed in `NilFormat`, implement
+  
+    construct(::Type{T}, ::Nothing, ::NilFormat)::T
+
+or make sure that the constructor `T()` is defined.
 """
 struct NilFormat <: CoreFormat end
 
@@ -70,12 +70,12 @@ function isformatbyte(byte, ::NilFormat)
   return byte == 0xc0
 end
 
-function pack(io::IO, value, ::NilFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::NilFormat, ::Rules)::Nothing
   write(io, 0xc0)
   return nothing
 end
 
-function unpack(io::IO, ::NilFormat, ::Scope)::Nothing
+function unpack(io::IO, ::NilFormat, ::Rules)::Nothing
   byte = read(io, UInt8)
   if byte == 0xc0
     nothing
@@ -92,19 +92,7 @@ Core format for packing boolean values.
 
 Built upon the msgpack format `boolean`.
 
-### Packing
-To support packing a value `val` of type `T` in `BoolFormat`, implement
-
-    destruct(val::T, ::BoolFormat)::Bool
-
-### Unpacking
-To support unpacking a value of type `T` packed in `BoolFormat`, implement
-  
-    construct(::Type{T}, ::Bool, ::BoolFormat)::T
-
-or make sure that the constructor `T(::Bool)` is defined.
-
-### Defaults
+## Defaults
 `BoolFormat` is the default format of `Bool`. Use
 
     format(::Type{T}) = BoolFormat()
@@ -113,8 +101,20 @@ or
 
     @pack T in BoolFormat
 
-to make `BoolFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `BoolFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `BoolFormat`, implement
+
+    destruct(val::T, ::BoolFormat)::Bool
+
+## Unpacking
+To support unpacking values of type `T` packed in `BoolFormat`, implement
+  
+    construct(::Type{T}, ::Bool, ::BoolFormat)::T
+
+or make sure that the constructor `T(::Bool)` is defined.
 """
 struct BoolFormat <: CoreFormat end
 
@@ -122,7 +122,7 @@ function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
 end
 
-function pack(io::IO, value, ::BoolFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::BoolFormat, ::Rules)::Nothing
   if destruct(value, BoolFormat())
     write(io, 0xc3)
   else
@@ -131,7 +131,7 @@ function pack(io::IO, value, ::BoolFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BoolFormat, ::Scope)::Bool
+function unpack(io::IO, ::BoolFormat, ::Rules)::Bool
   byte = read(io, UInt8)
   if byte == 0xc3
     true
@@ -148,19 +148,7 @@ Core format for packing signed integer values.
 Built upon the msgpack formats `negative fixint`, `positive fixint`,
 `signed 8`, `signed 16`, `signed 32`, `signed 64`.
 
-### Packing
-To support packing a value `val` of type `T` in `SignedFormat`, implement
-
-    destruct(val::T, ::SignedFormat)::Signed
-
-### Unpacking
-To support unpacking a value of type `T` packed in `SignedFormat`, implement
-  
-    construct(::Type{T}, ::Int64, ::SignedFormat)::T
-
-or make sure that the constructor `T(::Int64)` is defined.
-
-### Defaults
+## Defaults
 `SignedFormat` is the default format of all subtypes of `Signed`. Use
 
     format(::Type{T}) = SignedFormat()
@@ -169,8 +157,20 @@ or
 
     @pack T in SignedFormat
 
-to make `SignedFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `SignedFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `SignedFormat`, implement
+
+    destruct(val::T, ::SignedFormat)::Signed
+
+## Unpacking
+To support unpacking values of type `T` packed in `SignedFormat`, implement
+  
+    construct(::Type{T}, ::Int64, ::SignedFormat)::T
+
+or make sure that the constructor `T(::Int64)` is defined.
 """
 struct SignedFormat <: CoreFormat end
 
@@ -180,7 +180,7 @@ function isformatbyte(byte, ::SignedFormat)
          0xd0 <= byte <= 0xd3 # signed 8 to 64
 end
 
-function pack(io::IO, value, ::SignedFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::SignedFormat, ::Rules)::Nothing
   x = destruct(value, SignedFormat())
   if -32 <= x < 0 # negative fixint
     write(io, reinterpret(UInt8, Int8(x)))
@@ -204,7 +204,7 @@ function pack(io::IO, value, ::SignedFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::SignedFormat, ::Scope)::Int64
+function unpack(io::IO, ::SignedFormat, ::Rules)::Int64
   byte = read(io, UInt8)
   if byte >= 0xe0 # negative fixint
     reinterpret(Int8, byte)
@@ -240,19 +240,7 @@ Core format for packing unsigned integer values.
 Built upon the msgpack formats `positive fixint`, `unsigned 8`, `unsigned
 16`, `unsigned 32`, `unsigned 64`.
 
-### Packing
-To support packing a value `val` of type `T` in `UnsignedFormat`, implement
-
-    destruct(val::T, ::UnsignedFormat)::Unsigned
-
-### Unpacking
-To support unpacking a value of type `T` packed in `UnsignedFormat`, implement
-  
-    construct(::Type{T}, ::UInt64, ::UnsignedFormat)::T
-
-or make sure that the constructor `T(::UInt64)` is defined.
-
-### Defaults
+## Defaults
 `UnsignedFormat` is the default format of all subtypes of `Unsigned`. Use
 
     format(::Type{T}) = UnsignedFormat()
@@ -261,8 +249,20 @@ or
 
     @pack T in UnsignedFormat
 
-to make `UnsignedFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `UnsignedFormat` the default format for type `T`. If `T` is abstract,
+use `{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `UnsignedFormat`, implement
+
+    destruct(val::T, ::UnsignedFormat)::Unsigned
+
+## Unpacking
+To support unpacking values of type `T` packed in `UnsignedFormat`, implement
+  
+    construct(::Type{T}, ::UInt64, ::UnsignedFormat)::T
+
+or make sure that the constructor `T(::UInt64)` is defined.
 """
 struct UnsignedFormat <: CoreFormat end
 
@@ -271,7 +271,7 @@ function isformatbyte(byte, ::UnsignedFormat)
          0xcc <= byte <= 0xcf # unsigned 8 to 64
 end
 
-function pack(io::IO, value, ::UnsignedFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::UnsignedFormat, ::Rules)::Nothing
   x = destruct(value, UnsignedFormat())
   if x < 128 # positive fixint
     write(io, UInt8(x))
@@ -293,7 +293,7 @@ function pack(io::IO, value, ::UnsignedFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::UnsignedFormat, ::Scope)::UInt64
+function unpack(io::IO, ::UnsignedFormat, ::Rules)::UInt64
   byte = read(io, UInt8)
   if byte < 128 # positive fixint
     byte
@@ -317,19 +317,7 @@ Core format for packing float values.
 
 Built upon the msgpack formats `float 32`, `float 64`.
 
-### Packing
-To support packing a value `val` of type `T` in `FloatFormat`, implement
-
-    destruct(val::T, ::FloatFormat)::Union{Float16, Float32, Float64}
-
-### Unpacking
-To support unpacking a value of type `T` packed in `FloatFormat`, implement
-  
-    construct(::Type{T}, ::Float64, ::FloatFormat)::T
-
-or make sure that the constructor `T(::Float64)` is defined.
-
-### Defaults
+## Defaults
 `FloatFormat` is the default format for `Float16`, `Float32`, and `Float64`. Use
 
     format(::Type{T}) = FloatFormat()
@@ -338,8 +326,20 @@ or
 
     @pack T in FloatFormat
 
-to make `FloatFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `FloatFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `FloatFormat`, implement
+
+    destruct(val::T, ::FloatFormat)::Union{Float16, Float32, Float64}
+
+## Unpacking
+To support unpacking values of type `T` packed in `FloatFormat`, implement
+  
+    construct(::Type{T}, ::Float64, ::FloatFormat)::T
+
+or make sure that the constructor `T(::Float64)` is defined.
 """
 struct FloatFormat <: CoreFormat end
 
@@ -347,7 +347,7 @@ function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
 end
 
-function pack(io::IO, value, ::FloatFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::FloatFormat, ::Rules)::Nothing
   val = destruct(value, FloatFormat())
   if isa(val, Float16) || isa(val, Float32) # float 32
     write(io, 0xca)
@@ -359,7 +359,7 @@ function pack(io::IO, value, ::FloatFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::FloatFormat, ::Scope)::Float64
+function unpack(io::IO, ::FloatFormat, ::Rules)::Float64
   byte = read(io, UInt8)
   if byte == 0xca ## float 32
     read(io, Float32) |> ntoh
@@ -377,22 +377,7 @@ Core format for packing string values.
 
 Built upon the msgpack formats `fixstr`, `str 8`, `str 16`, `str 32`.
 
-### Packing
-To support packing a value `val` of type `T` in `StringFormat`, implement
-
-    destruct(val::T, ::StringFormat)::R
-
-where the returned value `ret::R` must implement `sizeof(ret)` (number of
-bytes) as well as `write(io, ret)`.
-
-### Unpacking
-To support unpacking a value of type `T` packed in `StringFormat`, implement
-  
-    construct(:: Type{T}, ::String, ::StringFormat)::T
-
-or make sure that `convert(T, ::String)` is defined.
-
-### Defaults
+## Defaults
 `StringFormat` is the default format for `Symbol` and all subtypes of
 `AbstractString`. Use
 
@@ -402,8 +387,23 @@ or
 
     @pack T in StringFormat
 
-to make `StringFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `StringFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `StringFormat`, implement
+
+    destruct(val::T, ::StringFormat)::R
+
+where the returned value `ret::R` must implement `sizeof(ret)` (number of
+bytes) as well as `write(io, ret)`.
+
+## Unpacking
+To support unpacking values of type `T` packed in `StringFormat`, implement
+  
+    construct(:: Type{T}, ::String, ::StringFormat)::T
+
+or make sure that `convert(T, ::String)` is defined.
 """
 struct StringFormat <: CoreFormat end
 
@@ -412,7 +412,7 @@ function isformatbyte(byte, ::StringFormat)
          0xd9 <= byte <= 0xdb # str 8 to 32
 end
 
-function pack(io::IO, value, ::StringFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::StringFormat, ::Rules)::Nothing
   str = destruct(value, StringFormat())
   n = sizeof(str)
   if n < 32 # fixstr format
@@ -433,7 +433,7 @@ function pack(io::IO, value, ::StringFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::StringFormat, ::Scope)::String
+function unpack(io::IO, ::StringFormat, ::Rules)::String
   byte = read(io, UInt8)
   n = if 0xa0 <= byte <= 0xbf # fixstr  format
     byte & 0x1f
@@ -458,22 +458,7 @@ Core format for packing binary values.
 
 Built upon the msgpack formats `bin 8`, `bin 16`, `bin 32`.
 
-### Packing
-To support packing a value `val` of type `T` in `BinaryFormat`, implement
-
-    destruct(val::T, ::BinaryFormat)::R
-
-where the returned value `ret::R` must implement `sizeof(ret)` (number of
-bytes) as well as `write(io, ret)`.
-
-### Unpacking
-To support unpacking a value of type `T` packed in `BinaryFormat`, implement
-  
-    construct(::Type{T}, ::Vector{UInt8}, ::BinaryFormat)::T
-
-or make sure that the constructor `T(::Vector{UInt8})` is defined.
-
-### Defaults
+## Defaults
 `BinaryFormat` is the default format for `Pack.Bytes`. Use
 
     format(::Type{T}) = BinaryFormat()
@@ -482,8 +467,23 @@ or
 
     @pack T in BinaryFormat
 
-to make `BinaryFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `BinaryFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `BinaryFormat`, implement
+
+    destruct(val::T, ::BinaryFormat)::R
+
+where the returned value `ret::R` must implement `sizeof(ret)` (number of
+bytes) as well as `write(io, ret)`.
+
+## Unpacking
+To support unpacking values of type `T` packed in `BinaryFormat`, implement
+  
+    construct(::Type{T}, ::Vector{UInt8}, ::BinaryFormat)::T
+
+or make sure that the constructor `T(::Vector{UInt8})` is defined.
 """
 struct BinaryFormat <: Format end
 
@@ -491,7 +491,7 @@ function isformatbyte(byte, ::BinaryFormat)
   return 0xc4 <= byte <= 0xc6
 end
 
-function pack(io::IO, value, ::BinaryFormat, ::Scope)::Nothing
+function pack(io::IO, value, ::BinaryFormat, ::Rules)::Nothing
   bin = destruct(value, BinaryFormat())
   n = sizeof(bin)
   if n <= typemax(UInt8) # bin8
@@ -510,7 +510,7 @@ function pack(io::IO, value, ::BinaryFormat, ::Scope)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BinaryFormat, ::Scope)::Vector{UInt8}
+function unpack(io::IO, ::BinaryFormat, ::Rules)::Vector{UInt8}
   byte = read(io, UInt8)
   n = if byte == 0xc4 # bin8
     read(io, UInt8)
@@ -529,24 +529,7 @@ Core format for packing vector values.
 
 Built upon the msgpack formats `fixarray`, `array 16`, `array 32`.
 
-### Packing
-To support packing a value `val` of type `T` in `VectorFormat`, implement
-
-    destruct(val::T, ::VectorFormat)::R
-
-where the returned value `ret::R` must implement `length(ret)` (number of
-entries) and must be iterable. The formats of the entries of `val` are
-determined via [`valueformat`](@ref).
-
-### Unpacking
-To support unpacking a value of type `T` packed in `VectorFormat`, implement
-  
-    construct(::Type{T}, ::Generator{T}, ::VectorFormat)::T
-
-or make sure that the constructor `T(::Generator{T})` is defined (see
-[`Generator`](@ref)).
-
-### Defaults
+## Defaults
 `VectorFormat` is the default format for subtypes of `Tuple` and
 `AbstractVector`. Use
 
@@ -556,8 +539,34 @@ or
 
     @pack T in VectorFormat
 
-to make `VectorFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `VectorFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `VectorFormat`, implement
+
+    destruct(val::T, ::VectorFormat)::R
+
+where the returned value `ret::R` must implement `length(ret)` (number of
+entries) and must be iterable. The formats of the entries of `val` are
+determined via [`valueformat`](@ref).
+
+## Unpacking
+To support unpacking values of type `T` packed in `VectorFormat`, implement
+  
+    construct(::Type{T}, values::Generator{T}, ::VectorFormat)::T
+
+or make sure that the constructor `T(values::Generator{T})` is defined (see
+[`Generator`](@ref)). The respective types and formats of the entries of `values` are determined via [`valuetype`](@ref) and [`valueformat`](@ref).
+
+!!! warning
+
+    During construction, all entries of the generator `values` have to be
+    iterated over. Since `Generator{T}` wraps a lazy map that reads from the IO
+    source to be unpacked, not conducting the iteration before the next object
+    is processed will interfere with unpacking of subsequent values. For the
+    same reason, you should not store the object `values` and access it at a
+    later time.
 """
 struct VectorFormat <: Format end
 
@@ -567,8 +576,7 @@ function isformatbyte(byte, ::VectorFormat)
          byte == 0xdd # array 32
 end
 
-function pack(io::IO, value::T, fmt::VectorFormat, scope::Scope) where {T}
-  val = destruct(value, fmt, scope)
+function writeheaderbytes(io::IO, val, ::VectorFormat)
   n = length(val)
   if n < 16 # fixarray
     write(io, 0x90 | UInt8(n))
@@ -579,49 +587,49 @@ function pack(io::IO, value::T, fmt::VectorFormat, scope::Scope) where {T}
     write(io, 0xdd)
     write(io, UInt32(n) |> hton)
   else
-    ArgumentError("invalid array length $n") |> throw
+    ArgumentError("invalid vector length $n") |> throw
   end
+end
+
+function readheaderbytes(io::IO, ::VectorFormat)::Int
+  byte = read(io, UInt8)
+  if byte & 0xf0 == 0x90 # fixarray
+    return byte & 0x0f
+  elseif byte == 0xdc # array 16
+    return read(io, UInt16) |> ntoh
+  elseif byte == 0xdd # array 32
+    return read(io, UInt32) |> ntoh
+  else
+    byteerror(byte, fmt)
+  end
+end
+
+function pack(io::IO, value::T, fmt::VectorFormat, rules::Rules) where {T}
+  val = destruct(value, fmt, rules)
+  writeheaderbytes(io, val, fmt)
   for (state, entry) in enumerate(val)
-    fmt_val = valueformat(T, fmt, state, scope)
-    pack(io, entry, fmt_val, scope)
+    fmt_val = valueformat(T, state, fmt, rules)
+    pack(io, entry, fmt_val, rules)
   end
   return nothing
 end
 
-function unpack(io::IO, ::Type{T}, fmt::VectorFormat, scope::Scope)::T where {T}
-  byte = read(io, UInt8)
-  n = if byte & 0xf0 == 0x90 # fixarray
-    Int(byte & 0x0f)
-  elseif byte == 0xdc # array 16
-    Int(read(io, UInt16) |> ntoh)
-  elseif byte == 0xdd # array 32
-    Int(read(io, UInt32) |> ntoh)
-  else
-    byteerror(byte, fmt)
-  end
+function unpack(io::IO, ::Type{T}, fmt::VectorFormat, rules::Rules)::T where {T}
+  n = readheaderbytes(io, fmt)
   entries = Iterators.map(1:n) do state
-    S = valuetype(T, fmt, state, scope)
-    fmt_val = valueformat(T, fmt, state, scope)
-    entry = unpack(io, S, fmt_val, scope)
+    S = valuetype(T, state, fmt, rules)
+    fmt_val = valueformat(T, state, fmt, rules)
+    entry = unpack(io, S, fmt_val, rules)
     return entry
   end
-  return construct(T, Generator{T}(entries), fmt, scope)
+  return construct(T, Generator{T}(entries), fmt, rules)
 end
 
 # Support for generic unpacking / AnyFormat
-function unpack(io::IO, ::VectorFormat, scope::Scope)::Vector
-  byte = read(io, UInt8)
-  n = if byte & 0xf0 == 0x90 # fixarray
-    byte & 0x0f
-  elseif byte == 0xdc # array 16
-    read(io, UInt16) |> ntoh
-  elseif byte == 0xdd # array 32
-    read(io, UInt32) |> ntoh
-  else
-    byteerror(byte, VectorFormat())
-  end
+function unpack(io::IO, ::VectorFormat, rules::Rules)::Vector
+  n = readheaderbytes(io, VectorFormat())
   values = map(1:n) do _
-    return unpack(io, AnyFormat(), scope)
+    return unpack(io, AnyFormat(), rules)
   end
   return values
 end
@@ -632,27 +640,7 @@ Core format for packing map / dictionary values.
 
 Built upon the msgpack formats `fixmap`, `map 16`, `map 32`.
 
-### Packing
-To support packing a value `val` of type `T` in `MapFormat`, implement
-
-    destruct(val::T, ::MapFormat)::R
-
-where the returned value `ret::R` must implement `length(ret)` (number of
-entries) and must be iterable with pairs as entries. The key / value formats
-of the entries of `val` are determined via [`keyformat`](@ref) and
-[`valueformat`](@ref).
-
-### Unpacking
-To support unpacking a value of type `T` packed in `MapFormat`, implement
-  
-    construct(::Type{T}, ::Generator{T}, ::MapFormat)::T
-
-or make sure that the constructor `T(::Generator{T})` is defined (see
-[`Generator`](@ref)). During unpacking, the respective formats are determined
-via [`keyformat`](@ref) and [`valueformat`](@ref) while the types of the entries
-to be unpacked are gathered via [`keytype`](@ref) and [`valuetype`](@ref).
-
-### Defaults
+## Defaults
 `MapFormat` is the default format for subtypes of `NamedTuple` and `Dict`. Use
 
     format(::Type{T}) = MapFormat()
@@ -661,8 +649,38 @@ or
 
     @pack T in MapFormat
 
-to make `MapFormat` the default format for type `T` (if `T` is abstract, use
-`{<: T}` to cover all subtypes).
+to make `MapFormat` the default format for type `T`. If `T` is abstract, use
+`{<: T}` to cover all subtypes.
+
+## Packing
+To support packing values of type `T` in `MapFormat`, implement
+
+    destruct(val::T, ::MapFormat)::R
+
+where the returned value `ret::R` must implement `length(ret)` (number of
+entries) and must be iterable with pairs as entries. The key / value formats
+of the entries of `val` are determined via [`keyformat`](@ref) and
+[`valueformat`](@ref).
+
+## Unpacking
+To support unpacking values of type `T` packed in `MapFormat`, implement
+  
+    construct(::Type{T}, pairs::Generator{T}, ::MapFormat)::T
+
+or make sure that the constructor `T(pairs::Generator{T})` is defined (see
+[`Generator`](@ref)), where `pairs` will contain key-value pairs as
+entries. The respective types and formats of the keys and values are determined
+during unpacking via [`keytype`](@ref), [`valuetype`](@ref),
+[`keyformat`](@ref) and [`valueformat`](@ref).
+
+!!! warning
+
+    During construction, all entries of the generator `pairs` have to be
+    iterated over. Since `Generator{T}` wraps a lazy map that reads from the
+    IO source to be unpacked, not conducting the iteration before the next
+    object is processed will interfere with unpacking of subsequent values. For
+    the same reason, you should not store the object `pairs` and access it at a
+    later time.
 """
 struct MapFormat <: Format end
 
@@ -672,8 +690,7 @@ function isformatbyte(byte, ::MapFormat)
          byte == 0xdf # map 32
 end
 
-function pack(io::IO, value::T, fmt::MapFormat, scope::Scope) where {T}
-  val = destruct(value, fmt, scope)
+function writeheaderbytes(io::IO, val, ::MapFormat)
   n = length(val)
   if n < 16 # fixmap
     write(io, 0x80 | UInt8(n))
@@ -686,56 +703,56 @@ function pack(io::IO, value::T, fmt::MapFormat, scope::Scope) where {T}
   else
     ArgumentError("invalid map length $n") |> throw
   end
-  state = iterstate(T, fmt, scope)
+end
+
+function readheaderbytes(io::IO, ::MapFormat)::Int
+  byte = read(io, UInt8)
+  if byte & 0xf0 == 0x80
+    return byte & 0x0f
+  elseif byte == 0xde
+    return read(io, UInt16) |> ntoh
+  elseif byte == 0xdf
+    return read(io, UInt32) |> ntoh
+  else
+    byteerror(byte, fmt)
+  end
+end
+
+function pack(io::IO, value::T, fmt::MapFormat, rules::Rules) where {T}
+  val = destruct(value, fmt, rules)
+  writeheaderbytes(io, val, fmt)
+  state = iterstate(T, fmt, rules)
   for entry in val
-    fmt_key = keyformat(T, fmt, state, scope)
-    fmt_val = valueformat(T, fmt, state, scope)
-    pack(io, first(entry), fmt_key, scope)
-    pack(io, last(entry), fmt_val, scope)
-    state = iterstate(T, fmt, state, entry, scope)
+    fmt_key = keyformat(T, state, fmt, rules)
+    fmt_val = valueformat(T, state, fmt, rules)
+    pack(io, first(entry), fmt_key, rules)
+    pack(io, last(entry), fmt_val, rules)
+    state = iterstate(T, state, entry, fmt, rules)
   end
   return nothing
 end
 
-function unpack(io::IO, ::Type{T}, fmt::MapFormat, scope::Scope)::T where {T}
-  byte = read(io, UInt8)
-  n = if byte & 0xf0 == 0x80
-    byte & 0x0f
-  elseif byte == 0xde
-    read(io, UInt16) |> ntoh
-  elseif byte == 0xdf
-    read(io, UInt32) |> ntoh
-  else
-    byteerror(byte, fmt)
-  end
+function unpack(io::IO, ::Type{T}, fmt::MapFormat, rules::Rules)::T where {T}
+  n = readheaderbytes(io, fmt)
   pairs = Iterators.map(1:n) do state
-    K = keytype(T, fmt, state, scope)
-    V = valuetype(T, fmt, state, scope)
-    fmt_key = keyformat(T, fmt, state, scope)
-    fmt_val = valueformat(T, fmt, state, scope)
-    key = unpack(io, K, fmt_key, scope)
-    value = unpack(io, V, fmt_val, scope)
+    K = keytype(T, state, fmt, rules)
+    V = valuetype(T, state, fmt, rules)
+    fmt_key = keyformat(T, state, fmt, rules)
+    fmt_val = valueformat(T, state, fmt, rules)
+    key = unpack(io, K, fmt_key, rules)
+    value = unpack(io, V, fmt_val, rules)
     entry = key=>value
     return entry
   end
-  return construct(T, Generator{T}(pairs), MapFormat(), scope)
+  return construct(T, Generator{T}(pairs), MapFormat(), rules)
 end
 
 # Support for generic unpacking / AnyFormat
-function unpack(io::IO, ::MapFormat, scope::Scope)::Dict
-  byte = read(io, UInt8)
-  n = if byte & 0xf0 == 0x80
-    byte & 0x0f
-  elseif byte == 0xde
-    read(io, UInt16) |> ntoh
-  elseif byte == 0xdf
-    read(io, UInt32) |> ntoh
-  else
-    byteerror(byte, MapFormat())
-  end
+function unpack(io::IO, ::MapFormat, rules::Rules)::Dict
+  n = readheaderbytes(io, MapFormat())
   pairs = Iterators.map(1:n) do _
-    key = unpack(io, AnyFormat(), scope)
-    value = unpack(io, AnyFormat(), scope)
+    key = unpack(io, AnyFormat(), rules)
+    value = unpack(io, AnyFormat(), rules)
     return (key, value)
   end
   return Dict(pairs)

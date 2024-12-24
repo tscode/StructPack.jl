@@ -2,9 +2,13 @@
 """
 Convenience format to unpack generic msgpack values.
 
+Note that custom rules implemented via a [`Rules`](@ref) singleton are ignored
+by [`AnyFormat`](@ref).
+
 !!! note
 
-    msgpack extensions and the date format are currently not supported
+    msgpack extensions and the date format are currently not supported by
+    [`AnyFormat`](@ref).
 """
 struct AnyFormat <: Format end
 
@@ -41,8 +45,9 @@ end
 
 pack(io::IO, value, ::AnyFormat) = pack(io, value)
 
-function unpack(io::IO, ::AnyFormat, scope::DefaultScope = DefaultScope())
+function unpack(io::IO, ::AnyFormat, rules::Rules = FallbackRules())
   fmt = peekformat(io)
-  return unpack(io, fmt, DefaultScope())
+  # Non-default rules are ignored for AnyFormat
+  return unpack(io, fmt, FallbackRules())
 end
 

@@ -1,15 +1,15 @@
 
 """
-Auxiliary object for unpacking sequential values like vectors or maps.
+Auxiliary object for unpacking sequential values.
 
 Implements the `Base` iterator interface and can for most purposes be treated
 like a `Base.Generator`. Compared to the latter, it is equipped with additional
-element type information from its first type parameter `T`.
+element type information via its first type parameter `T`.
 
 In particular, when unpacking a value of type `Generator{T}` in
-[`VectorFormat`](@ref) or [`MapFormat`](@ref), the [`valuetype`](@ref),
-[`valueformat`](@ref), [`keytype`](@ref), and [`keyformat`](@ref) methods
-dispatched on `T` are called to determine how elements are unpacked.
+[`VectorFormat`](@ref) or [`MapFormat`](@ref), the methods [`valuetype`](@ref),
+[`valueformat`](@ref), [`keytype`](@ref), and [`keyformat`](@ref) are called
+with type argument `T` to determine how elements are unpacked.
 """
 struct Generator{T, I}
   iter::I
@@ -26,23 +26,23 @@ function Base.IteratorSize(::Type{<: Generator{T, I}}) where {T, I}
   return Base.IteratorSize(I)
 end
 
-function keytype(::Type{Generator{T}}, fmt::Format, state, scope::Scope) where {T}
-  return keytype(T, fmt, state, scope)
+function keytype(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
+  return keytype(T, state, fmt, rules)
 end
 
-function keyformat(::Type{Generator{T}}, fmt::Format, state, scope::Scope) where {T}
-  return keyformat(T, fmt, state, scope)
+function keyformat(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
+  return keyformat(T, state, fmt, rules)
 end
 
-function valuetype(::Type{Generator{T}}, fmt::Format, state, scope::Scope) where {T}
-  return valuetype(T, fmt, state, scope)
+function valuetype(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
+  return valuetype(T, state, fmt, rules)
 end
 
-function valueformat(::Type{Generator{T}}, fmt::Format, state, scope::Scope) where {T}
-  return valueformat(T, fmt, state, scope)
+function valueformat(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
+  return valueformat(T, state, fmt, rules)
 end
 
-function construct(::Type{Generator{T}}, val::Generator{Generator{T}}, ::Format, scope::Scope) where {T}
+function construct(::Type{Generator{T}}, val::Generator{Generator{T}}, ::Format, ::Rules) where {T}
   return Generator{T}(val.iter)
 end
 

@@ -4,64 +4,51 @@ Abstract format type.
 
 Formats are responsible for reducing the packing and unpacking of julia values
 to msgpack primitives.
-
-To implement a custom format `MyFormat`, define the singleton structure
-
-    struct MyFormat <: Format end
-
-and implement the methods `pack(io::IO, value::T, fmt::F, scope::Scope)`
-as well as either `unpack(io::IO, T::Type, ::F, ::Scope)::T` or
-`unpack(io::IO, ::F, ::Scope)` for all supported types `T`. The latter variant
-of [`unpack`](@ref) is a convenience method that ensures that
-[`construct`](@ref) is called on its output with the type information `T`
-passed.
-
-The `scope` object, which is used to overwrite serialization defaults,
-should be passed on to all further calls that are concerned with packing or
-unpacking (i.e., [`pack`](@ref), [`unpack`](@ref), [`format`](@ref),
-[`destruct`](@ref), and [`construct`](@ref)).
 """
 abstract type Format end
 
 """
-Abstract scope type.
+Abstract Rules type.
 
-A scope can be introduced to enforce custom behavior when packing and unpacking
+Rules are introduced to enforce custom behavior when packing and unpacking
 values.
 
-In particular, a scope can influence which formats are assigned to types (via
-[`format`](@ref)) or fields of a struct (via [`valueformat`](@ref)), and they
-can influence how objects are processed before packing and after unpacking (via
-[`destruct`](@ref) and [`construct`(@ref)]).
-
-The scope-free default definitions of the mentioned methods are used as fallback.
+In particular, rules can influence which formats are assigned to types (via
+[`format`](@ref)) or to fields of a struct (via [`valueformat`](@ref)).
+They can also influence how objects are processed before packing and after
+unpacking (via [`destruct`](@ref) and [`construct`(@ref)]).
 """
-abstract type Scope end
+abstract type Rules end
 
 """
-Default scope that provides fallback implementations.
+Default rules that call fallback implementations.
 
-This is only a auxiliary type and should not come into contact with users of
-Pack.jl.
+This is primarily a auxiliary type and should in most cases not come into
+contact with users of Pack.jl.
 
 !!! warn
 
-    Do not dispatch on `::DefaultScope` to provide global defaults.
-    Always use the scope-free methods. For example, use
-    `format(::Type{MyType}) = ...` instead of
-    `format(::Type{MyType}, ::DefaultScope) = ...` to set a default format for
-    `MyType`.
+    Do not dispatch on `::FallbackRules` to provide global defaults.
+    Always use [`Rules`](@ref)-free methods for this purpose.
+    For example, use `format(::Type{MyType}) = ...` instead of
+    `format(::Type{MyType}, ::FallbackRules) = ...` to set a default format
+    for `MyType`.
 """
-struct DefaultScope <: Scope end
+struct FallbackRules <: Rules end
 
 """
-    format(T::Type [, scope::Scope])
-    format(::T [, scope::Scope])
+Scoped value that captures the active packing rules.
+"""
+const rules = ScopedValue{Rules}(FallbackRules())
 
-Return the format associated to type `T` in `scope`.
+"""
+    format(T::Type [, rules::Rules])
+    format(::T [, rules::Rules])
 
-The scope-free version of this method must be implemented in order for `pack(io,
-value :: T)` and `unpack(io, T)` to work. It is used as fallback for all scopes.
+Return the format associated to type `T` in `rules`.
+
+The rules-free version of this method must be implemented in order for `pack(io,
+value :: T)` and `unpack(io, T)` to work. It is used as fallback for all rules.
 
 See also [`Format`](@ref) and [`DefaultFormat`](@ref).
 """
@@ -72,59 +59,60 @@ end
 # Support calling format on values
 format(::T, args...) where {T} = format(T, args...)
 
-# Specialize this function to select custom formats in your scope
-format(T::Type, ::Scope) = format(T)
+# Specialize this function to select custom formats in your rules
+format(T::Type, ::Rules) = format(T)
 
 """
-    construct(T::Type, val, fmt::Format [, scope::Scope])::T
+    construct(T::Type, val, fmt::Format [, rules::Rules])::T
 
 Postprocess a value `val` unpacked according to `fmt` and return an object
 of type `T`. The type of `val` depends on the format `fmt` that was used for
 unpacking.
 
 Defaults to `T(val)` but can be overwritten for any combination of `T`, `fmt`,
-and `scope`.
+and `rules`.
 """
 construct(T::Type, val, ::Format) = T(val)
 
-# Extend this function to use custom constructors in your scope
-construct(T::Type, val, fmt::Format, ::Scope) = construct(T, val, fmt)
+# Extend this function to use custom constructors in your rules
+construct(T::Type, val, fmt::Format, ::Rules) = construct(T, val, fmt)
 
 """
-    destruct(val::T, fmt::Format [, scope::Scope])
+    destruct(val::T, fmt::Format [, rules::Rules])
 
 Preprocess a value `val` to prepare packing it in the format `fmt`.
 
 Defaults to `val` but can be overwritten for any combination of `T`, `fmt`,
-and `scope`.
+and `rules`.
 
 Each format has specific requirements regarding the output of this method.
 """
 destruct(val, ::Format) = val
 
-# Extend this function to use custom destructors in your scope
-destruct(val, fmt::Format, ::Scope) = destruct(val, fmt)
+# Extend this function to use custom destructors in your rules
+destruct(val, fmt::Format, ::Rules) = destruct(val, fmt)
 
 """
-    pack(value, [, scope::Scope])::Vector{UInt8}
-    pack(value, [, fmt::Format, scope::Scope])::Vector{UInt8}
+    pack(value, [, rules::Rules])::Vector{UInt8}
+    pack(value, [, fmt::Format, rules::Rules])::Vector{UInt8}
     pack(io::IO, args...)::Nothing
 
 Create a binary msgpack representation of `value` according to the given format
 `fmt`. If a stream `io` is passed, the representation is written into it.
 
 If no format is provided, it is derived from the type of `value` via
-`Pack.format(typeof(value), scope)`. The scope defaults to `DefaultScope()`.
+`format(typeof(value), rules)`. The rules default to the value hold by
+[`Pack.rules`](@ref).
 
-If both a format and a scope are provided, `fmt` is used for packing `value`
-while `scope` is passed along to deeper packing calls.
+If both a format and rules are provided, `fmt` is used for packing `value`
+while `rules` is passed along to deeper packing related calls.
 """
-function pack(io::IO, value::T, scope::Scope = DefaultScope())::Nothing where {T}
-  return pack(io, value, format(T, scope), scope)
+function pack(io::IO, value::T, rules::Rules = Pack.rules[])::Nothing where {T}
+  return pack(io, value, format(T, rules), rules)
 end
 
 function pack(io::IO, value::T, fmt::Format)::Nothing where {T}
-  return pack(io, value, fmt, DefaultScope())
+  return pack(io, value, fmt, Pack.rules[])
 end
 
 function pack(value::T, args...)::Vector{UInt8} where {T}
@@ -134,27 +122,27 @@ function pack(value::T, args...)::Vector{UInt8} where {T}
 end
 
 """
-    unpack(bytes::Vector{UInt8}, T::Type [, scope::Scope])::T
-    unpack(bytes::Vector{UInt8}, T::Type [, fmt::Format, scope::Scope])::T
+    unpack(bytes::Vector{UInt8}, T::Type [, rules::Rules])::T
+    unpack(bytes::Vector{UInt8}, T::Type [, fmt::Format, rules::Rules])::T
     unpack(io::IO, T::Type, args...)::T
 
 Unpack a binary msgpack representation of a value of type `T` in format `fmt`
 from a byte vector `bytes` or a stream `io`. The returned value is guaranteed to
 be of type `T`.
 
-If no format is provided, it is derived from `T` via `Pack.format(T, scope)`.
-The scope defaults to `DefaultScope()`.
+If no format is provided, it is derived from `T` via `format(T, rules)`.
+The rules default to the value hold by [`Pack.rules`](@ref).
 """
-function unpack(io::IO, ::Type{T}, scope::Scope = DefaultScope())::T where {T}
-  return unpack(io, T, format(T, scope), scope)
+function unpack(io::IO, ::Type{T}, rules::Rules = Pack.rules[])::T where {T}
+  return unpack(io, T, format(T, rules), rules)
 end
 
-function unpack(io::IO, ::Type{T}, fmt::Format, scope::Scope = DefaultScope()) where {T}
-  val = unpack(io, fmt, scope)
-  return construct(T, val, fmt, scope)
+function unpack(io::IO, ::Type{T}, fmt::Format, rules::Rules = Pack.rules[]) where {T}
+  val = unpack(io, fmt, rules)
+  return construct(T, val, fmt, rules)
 end
 
-function unpack(::IO, fmt::Format, scope::Scope = DefaultScope())
+function unpack(::IO, fmt::Format, rules::Rules = Pack.rules[])
   ArgumentError("Generic unpacking in format $fmt not supported") |> throw
 end
 
@@ -183,63 +171,73 @@ situations where the type `T` is not yet known.
 """
 struct DefaultFormat <: Format end
 
-pack(io::IO, val, ::DefaultFormat, scope::Scope) = pack(io, val, scope)
+pack(io::IO, val, ::DefaultFormat, rules::Rules) = pack(io, val, rules)
 
-function unpack(io::IO, ::Type{T}, ::DefaultFormat, scope::Scope) where {T}
-  return unpack(io, T, scope)
+function unpack(io::IO, ::Type{T}, ::DefaultFormat, rules::Rules) where {T}
+  return unpack(io, T, rules)
 end
 
 """
-    keytype(T::Type, fmt::Format, state [, scope::Scope])::Type
+    keytype(T::Type, state, fmt::Format [, rules::Rules])::Type
 
 Return the type of the key at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
-This method is used when unpacking values in [`MapFormat`](@ref).
+This method is called when unpacking values in [`MapFormat`](@ref) and
+[`DynamicMapFormat`](@ref).
 
-The state object `state` is initialized and iterated by [`iterstate`](@ref).
+By default, the argument `state` equals the index in the key enumeration.
+For [`DynamicMapFormat`](@ref), `state` is initialized and iterated by
+[`iterstate`](@ref).
 """
-keytype(::Type, ::Format, state) = Symbol # default to support structs
-keytype(T::Type, fmt::Format, state, ::Scope) = keytype(T, fmt, state)
+keytype(::Type, state, ::Format) = Symbol # default to support structs
+keytype(T::Type, state, fmt::Format, ::Rules) = keytype(T, state, fmt)
 
 """
-    keyformat(T::Type, fmt::Format, state [, scope::Scope])::Format
+    keyformat(T::Type, state, fmt::Format [, rules::Rules])::Format
 
 Return the format of the key at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
-This method is used when packing or unpacking values in [`MapFormat`](@ref).
+This method is called when packing or unpacking values in [`MapFormat`](@ref) 
+and [`DynamicMapFormat`](@ref).
 
-The state object `state` is initialized and iterated by [`iterstate`](@ref).
+By default, the argument `state` equals the index in the key enumeration.
+For [`DynamicMapFormat`](@ref), `state` is initialized and iterated by
+[`iterstate`](@ref).
 """
-keyformat(T::Type, ::Format, state) = DefaultFormat()
-keyformat(T::Type, fmt::Format, state, ::Scope) = keyformat(T, fmt, state)
+keyformat(T::Type, state, ::Format) = DefaultFormat()
+keyformat(T::Type, state, fmt::Format, ::Rules) = keyformat(T, state, fmt)
 
 """
-    valuetype(T::Type, fmt::Format, state [, scope::Scope])::Type
+    valuetype(T::Type, fmt::Format, state [, rules::Rules])::Type
 
 Return the type of the value at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
 This method is used when unpacking values in [`VectorFormat`](@ref) and
-[`MapFormat`](@ref).
+[`MapFormat`](@ref) or their dynamic counterparts.
 
-The state object `state` is initialized and iterated by [`iterstate`](@ref).
+By default, the argument `state` equals the index in the value enumeration.
+For [`DynamicVectorFormat`](@ref) and [`DynamicMapFormat`](@ref), it is
+initialized and iterated by [`iterstate`](@ref).
 """
-valuetype(T::Type, ::Format, state) = Base.fieldtype(T, state)
-valuetype(T::Type, fmt::Format, state, ::Scope) = valuetype(T, fmt, state)
+valuetype(T::Type, state, ::Format) = Base.fieldtype(T, state)
+valuetype(T::Type, state, fmt::Format, ::Rules) = valuetype(T, state, fmt)
 
 """
-    valueformat(T::Type, fmt::Format, state [, scope::Scope])::Format
+    valueformat(T::Type, state, fmt::Format [, rules::Rules])::Format
 
 Return the format of the value at iteration state `state` when saving the
 entries of `T` in format `fmt`.
 
 This method is used when packing or unpacking values in [`VectorFormat`](@ref)
-or [`MapFormat`](@ref).
+and [`MapFormat`](@ref) or their dynamic counterparts.
 
-The state object `state` is initialized and iterated by [`iterstate`](@ref).
+By default, the argument `state` equals the index in the value enumeration.
+For [`DynamicVectorFormat`](@ref) and [`DynamicMapFormat`](@ref), it is
+initialized and iterated by [`iterstate`](@ref).
 """
-valueformat(T::Type, ::Format, scope) = DefaultFormat()
-valueformat(T::Type, fmt::Format, scope, ::Scope) = valueformat(T, fmt, scope)
+valueformat(::Type, state, ::Format) = DefaultFormat()
+valueformat(T::Type, state, fmt::Format, ::Rules) = valueformat(T, state, fmt)
 

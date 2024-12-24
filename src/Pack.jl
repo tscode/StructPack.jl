@@ -1,5 +1,8 @@
 module Pack
 
+# Pack currently uses the scoped values Pack.scope and Pack.whitelist
+using Base.ScopedValues
+
 # Interface and abstract type definitions
 include("pack.jl")
 
@@ -12,14 +15,12 @@ include("anyformat.jl")
 include("dynamicformats.jl")
 include("arrayformats.jl")
 include("typedformat.jl")
-include("extraformats.jl")
+# include("extraformats.jl")
 
 # Supported julia types
 include("basetypes.jl")
 
 # Convenience @pack macro for structs
 include("macro.jl")
-
-export @pack
 
 end # module Pack

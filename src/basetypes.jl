@@ -1,8 +1,4 @@
 
-const AnyVectorFormat = Union{VectorFormat, DynamicVectorFormat}
-const AnyMapFormat = Union{MapFormat, DynamicMapFormat}
-
-
 # Pack Any in AnyFormat by default
 format(::Type{Any}) = AnyFormat()
 construct(::Type{Any}, val, ::AnyFormat) = val
@@ -37,7 +33,7 @@ function construct(::Type{T}, vals, ::AnyVectorFormat) where {T <: Tuple}
   return convert(T, (vals...,))
 end
 
-valuetype(::Type{NTuple{N, T}}, vals) where {N, T} = T
+valuetype(::Type{NTuple{N, T}}, vals, ::AnyVectorFormat) where {N, T} = T
 
 # Pack {<: NamedTuple} in MapFormat by default
 format(::Type{<:NamedTuple}) = MapFormat()
@@ -53,15 +49,15 @@ end
 format(::Type{<:Pair}) = MapFormat()
 destruct(value::Pair, ::AnyMapFormat) = (value,)
 construct(P::Type{<:Pair}, pair, ::AnyMapFormat) = convert(P, first(pair))
-keytype(::Type{P}, ::AnyMapFormat, _) where {K, V, P <: Pair{K, V}} = K
-valuetype(::Type{P}, ::AnyMapFormat, _) where {K, V, P <: Pair{K, V}} = V
+keytype(::Type{P}, _, ::AnyMapFormat) where {K, V, P <: Pair{K, V}} = K
+valuetype(::Type{P}, _, ::AnyMapFormat) where {K, V, P <: Pair{K, V}} = V
 
 # Pack {<: AbstractDict} in MapFormat by default
 format(::Type{<:AbstractDict}) = MapFormat()
 destruct(value::AbstractDict, ::AnyMapFormat) = value
 construct(D::Type{<:AbstractDict}, pairs, ::AnyMapFormat) = D(pairs)
-keytype(::Type{<:AbstractDict{K, V}}, ::AnyMapFormat, _) where {K, V} = K
-valuetype(::Type{<:AbstractDict{K, V}}, ::AnyMapFormat, _) where {K, V} = V
+keytype(::Type{<:AbstractDict{K, V}}, _, ::AnyMapFormat) where {K, V} = K
+valuetype(::Type{<:AbstractDict{K, V}}, _, ::AnyMapFormat) where {K, V} = V
 
 #
 # Generic structs
@@ -104,7 +100,7 @@ function construct(::Type{T}, vals, ::AnyVectorFormat) where {T <: AbstractVecto
   return convert(T, collect(vals))
 end
 
-valuetype(::Type{<:AbstractVector{F}}, ::Format, _) where {F} = F
+valuetype(::Type{<:AbstractVector{F}}, _, ::Format) where {F} = F
 
 # Support packing {<: Vector} in BinaryFormat for bitstype elements
 function destruct(value::Vector{F}, ::BinaryFormat) where {F}
@@ -142,7 +138,7 @@ end
 
 # Support packing AbstractArray in VectorFormat
 destruct(value::AbstractArray, ::AnyVectorFormat) = value
-valuetype(T::Type{<:AbstractArray}, ::Format, _) = eltype(T)
+valuetype(T::Type{<:AbstractArray}, _, ::Format) = eltype(T)
 
 # Pack {<: AbstractArray} in ArrayFormat by default
 format(::Type{<:AbstractArray}) = ArrayFormat()
