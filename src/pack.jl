@@ -116,6 +116,9 @@ function pack(io::IO, value::T, fmt::Format)::Nothing where {T}
 end
 
 function pack(value::T, args...)::Vector{UInt8} where {T}
+  @assert !(T <: IO) """
+  Cannot call pack with the provided arguments.
+  """
   io = IOBuffer(; write = true, read = false)
   pack(io, value, args...)
   return take!(io)

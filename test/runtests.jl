@@ -96,7 +96,7 @@ end
   end
 end
 
-@testset "Struct" begin
+@testset "Structs" begin
   struct A
     a :: Nothing
     b :: String
@@ -105,7 +105,7 @@ end
 
   val = A(nothing, "test", (10, 10.))
 
-  for fmt in [Pack.MapFormat(), Pack.VectorFormat()]
+  for fmt in [Pack.MapFormat(), Pack.VectorFormat(), Pack.DynamicMapFormat(), Pack.DynamicVectorFormat()]
     @test packcycle(val, fmt = fmt)
   end
 
@@ -113,4 +113,18 @@ end
 
   Pack.format(::Type{A}) = Pack.MapFormat()
   @test packcycle(val)
+end
+
+@testset "TypedFormat" begin
+  val = rand(Int64, 10)
+  @test packcycle(val, Array, fmt = Pack.TypedFormat())
+  
+  struct B
+    a :: Tuple
+    b :: AbstractString
+  end
+  val = B((2, "test", 1e18), "This is a test")
+  Pack.valueformat(::Type{B}, index, ::Pack.TypedFormat) = Pack.TypedFormat()
+  @test packcycle(val, fmt = Pack.VectorFormat())
+  @test packcycle(val, Any, fmt = Pack.TypedFormat{Pack.MapFormat}())
 end

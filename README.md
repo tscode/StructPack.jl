@@ -1,185 +1,143 @@
 
 # Pack.jl
 
-This package is for people who want to serialize their beloved structures in
-a simple and transparent way. It operates on top of the
-[msgpack format](https://msgpack.org/index.html).
+This package is for people who want to efficiently serialize their beloved
+structures in a simple and transparent way. It operates on top of the binary
+[msgpack standard](https://msgpack.org/index.html).
 
 You might like this package because it
 
- - is pure lightweight julia with no dependencies.
- - does not allow uncontrolled code execution during unpacking.
- - is very flexible, with context-dependent format choices.
- - is quite fast for most objects.
+- is pure and straightforward julia with no dependencies.
+- has an easy interface.
+- is very flexible, with context-dependent format choices.
+- avoids uncontrolled code execution during unpacking.
+- is reasonably fast.
+- produces sound msgpack files that can be read universally.
 
-On the other hand, Pack.jl is probably not the right choice if you
+On the other hand, Pack.jl is (probably) not the right choice if you
  
- - need to serialize arbitrary julia objects out-of-the-box.
- - have enormous files and need lazy loading capabilities.
- - want to read arbitrary msgpack files from external sources.
+- need to serialize arbitrary julia objects out-of-the-box.
+- have enormous files and need lazy loading capabilities.
+- want to read arbitrary msgpack files from external sources.
 
-While the functionality to read generic msgpack is included to some degree
-(currently without support for extensions), the excellent package
-[MsgPack.jl]() is probably a better choice for this task.
+While the functionality to read generic msgpack is included (currently without
+support for extensions), you should in this case also consider the excellent
+package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which serves as
+inspiration for Pack.jl.
 
-## Usage
+## Rationale
 
-The functionality of `Pack.jl` revolves around the three functions `pack`,
-`unpack`, and `format`. The latter decides how a julia value should be converted
-to a binary representation during calls of the former two.
+**A lot** of options already exist in julia for data serialization. Besides
+the `Serialization` module in `Base`, this includes
+[JLD.jl](https://github.com/JuliaIO/JLD.jl),
+[JLD2.jl](https://github.com/JuliaIO/JLD2.jl),
+[JSON.jl](https://github.com/JuliaIO/JSON.jl),
+[JSON3.jl](https://github.com/quinnj/JSON3.jl),
+[BSON.jl](https://github.com/JuliaIO/BSON.jl),
+[Serde.jl](https://github.com/bhftbootcamp/Serde.jl),
+[MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), and probably many others.
+So why does this additional package deserve to exist?
 
-Formats are realized as singleton subtypes of `Pack.Format`. Core formats, that
-correspond more or less directly to underlying msgpack formats, are `NilFormat`,
-`BoolFormat`, `SignedFormat`, `UnsignedFormat`, `FloatFormat`, `VectorFormat`,
-`MapFormat`, and `BinaryFormat`.
+Well, no reason in particular. But in previous projects, I often found myself
+in situations where I wanted to permanantly, reliably and efficiently store
+custom julia structs that contained binary data. Loading should not be able to
+execute arbitrary code, since I would not always trust the source. At the same
+time, I wanted enough flexibility to reconstruct a value based on abstract type
+information only, in a controlled way.
 
-Convenience formats built on top of these are `ArrayFormat`, `BinVectorFormat`,
-`BinArrayFormat`, as well as `TypedFormat`. The corresponding docstrings provide
-additional information.
+Oh, and the interface should be straightforward. And the code base should be
+transparent and avoid complexities, as far as possible. Ideally, it should also
+be compatible to a universally used format. And thus, this package was born.
 
-Many base types in julia have a default format associated to them and can be
-packed / unpacked without further instructions.
+## Concepts
+
+Have a look at this snippet of code:
 ```julia
-import Pack
+import Pack: MapFormat, VectorFormat, BinArrayFormat
 
-str = "This is a string" # Pack.StringFormat
-tup = ("tuple", 5, false) # Pack.VectorFormat
-ntup = (a = str, b = tup) # Pack.MapFormat
+abstract type A end
 
-bytes = Pack.pack(ntup)
-Pack.unpack(bytes, typeof(ntup))
-
-# or alternatively 
-
-io = IOBuffer()
-Pack.pack(io, ntup)
-Pack.unpack(io, typeof(ntup))
-```
-The type information passed to `Pack.unpack` is crucial, since (by default) no
-type information is stored in `bytes`. If it is left out, `Pack.unpack(bytes)`
-tries to load `bytes` as generic msgpack object and returns a `Dict`.
-
-See the section ?? below on how to unpack objects `::T` when `T` is an abstract type.
-
-### Custom packing
-
-If you have defined your own struct and want to serialize each field via the
-default formats, you have two immediate options to do so.
-```julia
-struct MyStruct
-  a::Float64
-  b::String
+struct B <: A
+  a::Int
+  b::Float64
 end
 
-Pack.format(::MyStruct) = Pack.MapFormat     # save the field names a and b
-# or
-Pack.format(::MyStruct) = Pack.VectorFormat  # do not save the field names
-```
-Pack.jl also provides the macro `@pack` that can conveniently be used to
-declare default formats: `Pack.@pack MyStruct in Pack.MapFormat`.
-
-This macro has additional benefits: If you do not want to store all fields of
-MyStruct, or use a specific constructor when unpacking, you can easily inform
-`@pack` in combination with `MapFormat`.
-```julia
-# Special constructor we want to use during unpacking
-Mystruct(a; b) = MyStruct(a, b)
-Pack.@pack Mystruct in MapFormat MyStruct(a; b)
-
-# or
-
-# We only want to serialize the field a
-Mystruct(a) = MyStruct(a, "always the same")
-Pack.@pack MyStruct in MapFormat MyStruct(a)
-```
-With a bit of additional work we have even more flexibility. For example, after
-we have decided to store only the field `MyStruct.a::Float64` anyway, we can
-just use `FloatFormat`.
-```julia
-Pack.format(::Type{MyStruct}) = FloatFormat()
-Pack.deconstruct(val::MyStruct, ::FloatFormat) = val.a
-Pack.construct(val::MyStruct, a, ::FloatFormat) = MyStruct(a, "always the same")
-```
-See the docstrings for the various supported formats to learn about the
-respective requirements for `destruct` and `construct`.
-
-### Context matters: Fields
-
-Pack.jl strives to be flexible when handling custom structs. In particular, it
-disagrees that a given value `v::T` should always be serialized in the same way,
-independent of the context.
-
-There are two primary mechanism to attach context information to `v::T` while it
-is being packed or unpacked: via its (potential) *parent* or via *scopes*.
-
-Here is a simple example where a field (the child) of a struct (the parent)
-receives a non-default format.
-
-```julia
-import Pack: MapFormat, BinVectorFormat
-
-struct MyStruct
-  a::String           # Default format is Pack.StringFormat
-  b::Vector{Float32}  # Default format is Pack.VectorFormat
+struct C <: A
+  a::Int
 end
 
-# We decide that MyStruct.b should rather be stored as binary vector
-Pack.@pack MyStruct in MapFormat (b in BinVectorFormat)
+struct D
+  a::String
+  b::Matrix{B}
+  d::A
+end
 
-value = MyStruct("My data is stored in binary", rand(Float32, 10))
-bytes = pack(value)     # serialize the structure
-unpack(bytes, MyStruct) # unpack the object again
-```
-Under the hood, this behavior is implemented by specializing the function
-`valueformat`, which determines the formats to be used for struct fields.
-For example, the following code reproduces the call to `@pack` shown above:
-```julia
-Pack.format(::Type{MyStruct}) = MapFormat()
+D(d; b) = D("default", b, d)
 
-function Pack.valueformat(::Type{MyStruct}, index)
-  index == 2 ? BinVectorFormat() : DefaultFormat()
+
+Pack.@pack begin
+  {<: A} in MapFormat
+  D in MapFormat D(d; b) [b in BinArrayFormat, d in TypedFormat]
 end
 ```
 
-### Context matters: Scopes
+For more examples and information about usage, see the package documentation.
 
-Another supported way to modify the format of `v::T` in a call to `pack` or
-`unpack` are so-called *scopes*, realized as singleton subtypes of `Scope`.
-Scopes are particularly useful if you desired to change how `v::T` is serialized
-but are reluctant to modify the global behavior for all values of type `T` (for
-example, because `::T` belongs to a third party package and you do not want to
-mess with its defaults).
+#### Booh! I hate macros :(
 
-Scopes are most conveniently created with the macro `Pack.@scope`.
+If you are not happy with the `@pack` macro, the following code will reproduce
+the same functionality:
 ```julia
-import Pack: ArrayFormat
+# @pack {<: A} in MapFormat
+Pack.format(Type{<: A}) = MapFormat()
 
-# In this scope, MyStruct.b is packed via ArrayFormat
-scope = Pack.@scope MyStruct in MapFormat (b in ArrayFormat)
+# @pack D in MapFormat ...
+Pack.format(Type{<: B}) = MapFormat()
 
-value = MyStruct("My data is stored as array", rand(Float32, 10))
-bytes = pack(value, scope)
-unpack(bytes, MyStruct, scope)
-```
-Scopes can be used to influence each aspect of the serialization, since they
-penetrate each packing related call (`pack`, `unpack`, `format`, `valueformat`,
-and so on). In order to add a rule to a scope, just specialize the respective
-method.
+# ... D(b, d) ...
+Pack.destruct(val::D, ::MapFormat) = (val.b, val.d) # only store b and d
+Pack.construct(::Type{D}, vals, ::MapFormat) = D(vals[1][2]; b = vals[2][2])
+Pack.valuetype(::Type{D}, index, ::MapFormat) = index == 1 ? Matrix{B} : A
 
-Without using macros, the example above can be reproduced as follows:
-```julia
-struct MyScope <: Scope end
+# ... [b in BinArrayFormat, d in TypedFormat]
+Pack.valueformat(::Type{D}, index, ::MapFormat) = index == 1 ? BinArrayFormat() : TypedFormat()
 
-format(::Type{MyStruct}, ::MyScope) = MapFormat()
-
-function Pack.valueformat(::Type{MyStruct}, index, ::MapFormat, ::MyScope)
-  index == 2 ? ArrayFormat() : DefaultFormat()
-end
-
-bytes = pack(value, MyScope())
-unpack(bytes, MyStruct, MyScope())
+# Allow constructors of A to be called when unpacking in TypedFormat
+Pack.whitelisted(::Type{<:A}) = true
 ```
 
-### Unpacking the abstract
+<!-- ## Benchmarks -->
 
+<!-- I know, I know, julia folks are addicted to performance. However, performance is not the primary goal of Pack.jl. Decent performance is -->  
 
+## Answers to be questioned
+
+> Is this package well-tested, performance optimized, and 100% production ready?
+
+Well... no. None of the three, probably. But the design should be fixed and the
+API stable. Features that are currently not supported are unlikely to make it
+into a future release. Unless they fit neatly and don't increase code complexity
+by much.
+
+What will make it into future releases is a better out-of-the-box support for
+types in `Base`, which is currently very limited but which is easily extensible.
+Also, support for additional popular types can easily be added via package
+extensions. I will patiently be waiting for corresponding issues and pull
+requests.
+
+> Can I trust you that `unpack` does not let chaos and havoc in my digital world?
+
+Certainly not! I tried my best to prevent uncontrolled code execution (by never
+using `eval` and by making sure that types are whitelisted before calling their
+constructors in `TypedFormat`), but maybe this is not enough. Also, another
+package you load and whose data you want to store may extend Pack.jl in a way
+that is nasty. So the honest answer is: I don't know.
+
+> It is a bummer that you cannot load structs when the ordering in the msgpack file is not correct...
+
+I tend to agree. It would be easy to solve this problem with a new format,
+but I am currently not sure about the best way to incorporate this. The main
+hinderance is that such a potential `UnorderedMapFormat` has to be less general
+than `MapFormat`, since the type and formats of the key objects cannot be easily
+determined. It should thus probably be implemented as `UnorderedStructFormat`
+and expect symbols as keys. Along this line, one could also implement `StructFormat`, which is `MapFormat` specialized to symbols as keys.

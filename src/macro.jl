@@ -1,4 +1,335 @@
 
+"""
+    insert_rules!(ex, rex)
+
+Add the trailing argument `::\$rex` to all toplevel function definitions in
+the expression `ex`.
+"""
+function inject_rules!(ex, rex)
+  if ex isa Expr
+    if ex.head == :function
+      if ex.args[1] isa Expr && ex.args[1].head == :where
+        arguments = ex.args[1].args[1].args
+      else
+        arguments = ex.args[1].args
+      end
+      push!(arguments, Expr(:(::), rex))
+    else
+      foreach(arg -> inject_rules!(arg, rex), ex.args)
+    end
+  end
+  return
+end
+
+"""
+    insert_constraint!(ex, cex)
+
+Add the where clause `where {\$cex}` to all toplevel function definitions
+in `ex`.
+"""
+inject_constraint!(_, ::Nothing) = nothing
+
+function inject_constraint!(ex, cex)
+  if ex isa Expr
+    if ex.head == :function
+      if ex.args[1] isa Expr && ex.args[1].head == :where
+        push!(ex.args[1].args, cex)
+      else
+        ex.args[1] = Expr(:where, ex.args[1], cex)
+      end
+    else
+      foreach(arg -> inject_constraint!(arg, cex), ex.args)
+    end
+  end
+  return
+end
+
+
+"""
+    is_type_expr(ex)
+
+Check weather the symbol or expression `ex` is a plausible type expression.
+
+Allowed expressions are, for example, `A` (Symbol), `A.B`, or `A.B{C, D, E.F}`.
+"""
+function is_type_expr(ex, curly = true)
+  if ex isa Symbol
+    # T
+    true
+  elseif ex.head == :curly && curly
+    # T{F, ...}
+    # We are lenient here, because a precise specification of possible types
+    # with arbitrary type parameters is hard
+    true
+  elseif ex.head == :.
+    # A.T
+    all(ex.args) do ex
+      ex isa QuoteNode ? ex.value isa Symbol : is_type_expr(ex, false)
+    end
+  else
+    false
+  end
+end
+
+"""
+    parse_rules_expr(ex)
+
+check if `ex` can be understood as rules expression and return it if it can.
+"""
+function parse_rules_expr(ex)
+  return is_type_expr(ex) ? ex : nothing
+end
+
+
+"""
+    parse_typetarget_expr(ex)
+
+Parse the type target expression of the [`@pack`](@ref) macro.
+
+A type target is either
+- just a type expression `T`. Then `(type = :T, constraint = nothing)` is returned.
+- a subtype selection `{S <: T}`. Then `(type = :S, constraint = :({S <: T}))` is returned.
+- an anonymous subtype selection `{<: T}`. Then `(var = S, constraint = :({\$S <: T}))` is returned, where `S` is a generated symbol.
+
+Returns `nothing` if parsing was unsuccessful.
+"""
+function parse_typetarget_expr(ex)
+  len = ex isa Symbol ? 0 : length(ex.args)
+  if is_type_expr(ex)
+    # T
+    return (type = ex, constraint = nothing)
+    
+  elseif len == 1 && ex.head == :braces
+    ex = ex.args[1]
+    len = ex isa Symbol ? 0 : length(ex.args)
+
+    if len == 1 &&
+       ex.head == :(<:) &&
+       is_type_expr(ex.args[1])
+
+      # {<: T}
+      S = gensym(:S)
+      pushfirst!(ex.args, S)
+      return (type = S, constraint = ex)
+
+    elseif len == 2 &&
+           ex.head == :(<:) &&
+           ex.args[1] isa Symbol &&
+           is_type_expr(ex.args[2])
+
+      # {S <: T}
+      S = ex.args[1]
+      return (type = S, constraint = ex)
+
+    end
+  end  
+  return nothing
+end
+
+"""
+    parse_informat_expr(ex)
+
+Parse an expression of the form `T in F`, where `T` is a valid type target (see
+[`parse_typetarget_expr`](@ref)) and `F` is a type expression that corresponds
+to a format.
+"""
+function parse_informat_expr(ex)
+  if !(ex isa Expr) || ex.head != :call
+    return
+  end
+  len = length(ex.args)
+  if len == 3 && ex.args[1] in [:in, :(=>)]
+    target = parse_typetarget_expr(ex.args[2])
+    format = parse_typetarget_expr(ex.args[3])
+    if !isnothing(target) && !isnothing(format) && isnothing(format.constraint)
+      return (; target, format = format.type)
+    end
+  end
+  return nothing
+end
+
+function code_informat(target, format)
+  return quote 
+    function Pack.format(::Type{$(target.type)})
+      return $format() 
+    end
+  end
+end
+
+"""
+    parse_constructor_expr(ex)
+
+Parse a constructor expression of the form `(a, b, ... ; c, d, ...)` or
+`C(a, b, ...; c, d, ...)`.
+
+Returns the named triple `(names = (a, b, ...), kwnames = (c, d, ...), and
+constructor = :C)`. In a constructor-less expression, `constructor = nothing`.
+"""
+function parse_constructor_expr(ex)
+  if !(ex isa Expr)
+    return
+  end
+  if ex.head == :tuple
+    # (a, b, ...; c, d...)
+    constructor = nothing # no constructor expression
+    if ex.args[1] isa Expr && ex.args[1].head == :parameters
+      # (a, b, ...; c, d...)
+      names = ex.args[2:end]
+      kwnames = ex.args[1].args
+    else
+      # (a, b, ...)
+      names = ex.args
+      kwnames = Symbol[]
+    end
+  elseif ex.head == :block && length(ex.args) == 3
+    # (a; b) (is not parsed as tuple and thus is extra case)
+    constructor = nothing 
+    names = [ex.args[1]]
+    kwnames = [ex.args[3]]
+  elseif ex.head == :call && ex.args[1] != :in
+    # C(a, b, ...; c, d, ...) 
+    constructor = ex.args[1]
+    if ex.args[2] isa Expr && ex.args[2].head == :parameters
+      # C(a, b, ...; c, d, ...)
+      names = ex.args[3:end]
+      kwnames = ex.args[2].args
+    else
+      names = ex.args[2:end]
+      kwnames = Symbol[]
+    end
+  else
+    return
+  end
+  # Make sure names and kwnames are actually lists of symbols
+  if all(isa.(names, Symbol)) && all(isa.(kwnames, Symbol))
+    names = Symbol[name for name in names]
+    kwnames = Symbol[name for name in kwnames]
+    return (; names, kwnames, constructor)
+  end
+  return
+end
+
+function code_constructor_map(target, format, names, kwnames, constructor)
+  @assert eval(format) <: AnyMapFormat """
+  Macro constructor currently only works for map formats. Given: $format.
+  """
+  symbols = (names..., kwnames...)
+  constructor = isnothing(constructor) ? target.type : constructor
+  len = length(names)
+  lenkw = length(kwnames)
+  return quote
+    function Pack.destruct(val::$(target.type), fmt::$format)
+      Iterators.map($symbols) do name
+        name=>getfield(val, name)
+      end
+    end
+
+    function Pack.construct(::Type{$(target.type)}, pairs, fmt::$format)
+      @assert length(pairs) == length($symbols) """
+      Inconsistent number of arguments during unpacking.
+      """
+      if $lenkw == 0
+        args = Iterators.map(last, pairs)
+        $constructor(args...)
+      else
+        args = Vector(undef, $len)
+        kwargs = Vector(undef, $lenkw)
+        for (index, pair) in enumerate(pairs)
+          if index <= $len
+            args[index] = pair[2]
+          else
+            kwargs[index] = pair
+          end
+        end
+        $constructor(args...; kwargs...)
+      end
+    end
+  end
+end
+
+"""
+    parse_fieldformat_expr(ex)
+
+Parse a single field format expression of the form `a in F` or `(a, b, ...)
+in F`.
+
+Returns a vector of pairs `[a=>F, b=>F, ...]`.
+"""
+function parse_fieldformat_expr(ex)
+  len = ex isa Symbol ? 0 : length(ex.args)
+  if len == 3 && ex.args[1] in [:in, :(=>)]
+    fieldexpr = ex.args[2]
+    if fieldexpr isa Symbol
+      fields = [fieldexpr]
+    elseif fieldexpr isa Expr &&
+       fieldexpr.head == :tuple &&
+       all(isa.(fieldexpr.args, Symbol))
+      fields = fieldexpr.args
+    else
+      return
+    end
+    format = parse_typetarget_expr(ex.args[3])
+    if !isnothing(format) && isnothing(format.constraint)
+      return [field => format.type for field in fields]
+    end
+  end
+  return
+end
+
+"""
+    parse_fieldformats_expr(ex)
+
+Parse a field format expression of the form `[a in Fa, b in Fb, ...]`, where `a`
+and `b` correspond to keys and `Fa`, `Fb` to format types.
+"""
+function parse_fieldformats_expr(ex)
+  if ex isa Expr && ex.head == :vect
+    pairs = mapreduce(vcat, ex.args) do arg
+      parse_fieldformat_expr(arg)
+    end
+    return Dict(pairs)
+  end
+  return nothing
+end
+
+function code_fieldformats(target, format, names, kwnames, formats)
+  symbols = (names..., kwnames...)
+  fexprs = map(symbols) do key
+    F = Base.get(formats, key, :(Pack.DefaultFormat))
+    Expr(:call, F)
+  end
+  formats = Expr(:tuple, fexprs...)
+  return quote
+    function Pack.valuetype(::Type{$(target.type)}, index, ::$format)
+      symbols = $symbols
+      return Base.fieldtype($(target.type), symbols[index])
+    end
+
+    function Pack.valueformat(::Type{$(target.type)}, index, ::$format)
+      formats = $formats
+      return formats[index]
+    end
+  end
+end
+
+macro newpack(args...)
+  informat = parse_informat_expr(args[1])
+  target = informat.target
+  format = informat.format
+  cons = parse_constructor_expr(args[2])
+  formats = parse_fieldformats_expr(args[3])
+
+  block1 = code_informat(target, format)
+  block2 = code_constructor_map(target, format, cons.names, cons.kwnames, cons.constructor)
+  block3 = code_fieldformats(target, format, cons.names, cons.kwnames, formats)
+  # join blocks
+  block = Expr(:block, block1.args..., block2.args..., block3.args...)
+  # block = block3
+  # inject_rules!(block, target.constraint)
+  inject_constraint!(block, target.constraint)
+  return esc(block)
+end
+
 #
 # process formats
 #
