@@ -5,6 +5,8 @@
 Add the trailing argument `::\$rex` to all toplevel function definitions in
 the expression `ex`.
 """
+inject_rules!(ex, ::Nothing) = nothing
+
 function inject_rules!(ex, rex)
   if ex isa Expr
     if ex.head == :function
@@ -74,7 +76,7 @@ end
 """
     parse_rules_expr(ex)
 
-check if `ex` can be understood as rules expression and return it if it can.
+Check if `ex` can be understood as rules expression and return it if it can.
 """
 function parse_rules_expr(ex)
   return is_type_expr(ex) ? ex : nothing
@@ -209,40 +211,35 @@ function parse_constructor_expr(ex)
   return
 end
 
-function code_constructor_map(target, format, names, kwnames, constructor)
-  @assert eval(format) <: AnyMapFormat """
-  Macro constructor currently only works for map formats. Given: $format.
-  """
+function code_constructor(target, names, kwnames, constructor)
   symbols = (names..., kwnames...)
   constructor = isnothing(constructor) ? target.type : constructor
   len = length(names)
   lenkw = length(kwnames)
+
   return quote
-    function Pack.destruct(val::$(target.type), fmt::$format)
+    function Pack.destruct(val::$(target.type), fmt::Pack.AbstractStructFormat)
       Iterators.map($symbols) do name
         name=>getfield(val, name)
       end
     end
 
-    function Pack.construct(::Type{$(target.type)}, pairs, fmt::$format)
-      @assert length(pairs) == length($symbols) """
-      Inconsistent number of arguments during unpacking.
-      """
-      if $lenkw == 0
-        args = Iterators.map(last, pairs)
-        $constructor(args...)
-      else
-        args = Vector(undef, $len)
-        kwargs = Vector(undef, $lenkw)
-        for (index, pair) in enumerate(pairs)
-          if index <= $len
-            args[index] = pair[2]
-          else
-            kwargs[index] = pair
-          end
-        end
-        $constructor(args...; kwargs...)
+    function Pack.construct(::Type{$(target.type)}, pairs::Vector, fmt::Pack.AbstractStructFormat)
+      if length(pairs) != length($symbols) 
+        unpackerror("Inconsistent number of arguments during unpacking.")
       end
+      args = Iterators.map(last, @view(pairs[1:$len]))
+      kwargs = @view(pairs[$len+1:end])
+      $constructor(args...; kwargs...)
+    end
+
+    function Pack.construct(::Type{$(target.type)}, pairs::Tuple, fmt::Pack.AbstractStructFormat)
+      if length(pairs) != length($symbols) 
+        unpackerror("Inconsistent number of arguments during unpacking.")
+      end
+      args = map(last, pairs[1:$len])
+      kwargs = pairs[$len+1:end]
+      $constructor(args...; kwargs...)
     end
   end
 end
@@ -284,332 +281,191 @@ and `b` correspond to keys and `Fa`, `Fb` to format types.
 """
 function parse_fieldformats_expr(ex)
   if ex isa Expr && ex.head == :vect
-    pairs = mapreduce(vcat, ex.args) do arg
-      parse_fieldformat_expr(arg)
+    if isempty(ex.args)
+      pairs = []
+    else
+      pairs = mapreduce(vcat, ex.args) do arg
+        parse_fieldformat_expr(arg)
+      end
     end
     return Dict(pairs)
   end
   return nothing
 end
 
-function code_fieldformats(target, format, names, kwnames, formats)
-  symbols = (names..., kwnames...)
-  fexprs = map(symbols) do key
-    F = Base.get(formats, key, :(Pack.DefaultFormat))
-    Expr(:call, F)
+function code_fieldformats(target, fieldnames, formats)
+  if isnothing(fieldnames)
+    fieldnames = :(Base.fieldnames($(target.type)))
   end
-  formats = Expr(:tuple, fexprs...)
   return quote
-    function Pack.valuetype(::Type{$(target.type)}, index, ::$format)
-      symbols = $symbols
-      return Base.fieldtype($(target.type), symbols[index])
+    function Pack.fieldnames(::Type{$(target.type)}, ::Pack.AbstractStructFormat)
+      return $fieldnames
     end
 
-    function Pack.valueformat(::Type{$(target.type)}, index, ::$format)
-      formats = $formats
-      return formats[index]
+    function Pack.fieldtypes(::Type{$(target.type)}, fmt::Pack.AbstractStructFormat)
+      names = Pack.fieldnames($(target.type), fmt)
+      return map(key -> Base.fieldtype($(target.type), key), names)
     end
-  end
-end
 
-macro newpack(args...)
-  informat = parse_informat_expr(args[1])
-  target = informat.target
-  format = informat.format
-  cons = parse_constructor_expr(args[2])
-  formats = parse_fieldformats_expr(args[3])
-
-  block1 = code_informat(target, format)
-  block2 = code_constructor_map(target, format, cons.names, cons.kwnames, cons.constructor)
-  block3 = code_fieldformats(target, format, cons.names, cons.kwnames, formats)
-  # join blocks
-  block = Expr(:block, block1.args..., block2.args..., block3.args...)
-  # block = block3
-  # inject_rules!(block, target.constraint)
-  inject_constraint!(block, target.constraint)
-  return esc(block)
-end
-
-#
-# process formats
-#
-
-function _isnativeformat(sym::Symbol)
-  try
-    F = getproperty(Pack, sym)
-    F <: Format
-  catch
-    false
-  end
-end
-
-function _injectmodule(ex)
-  if ex isa Symbol
-    _isnativeformat(ex) ? :(Pack.$ex) : ex
-  elseif ex isa Expr
-    Expr(ex.head, map(_injectmodule, ex.args)...)
-  else
-    ex
-  end
-end
-
-function _parsescope(ex)
-  len = ex isa Symbol ? 0 : length(ex.args)
-  if ex isa Symbol # @pack T args...
-    (ex, nothing)
-  elseif len == 1 && ex.head == :braces
-    ex = ex.args[1]
-    len = ex isa Symbol ? 0 : length(ex.args)
-    if len == 1 && ex.head == :(<:) # @pack {<: T} args...
-      (ex, nothing)
-    elseif len == 2 && ex.head == :(<:) && ex.args[1] isa Symbol # @pack {S <: T} args...
-      (ex, ex.args[1])
+    @generated function Pack.fieldformats(::Type{$(target.type)}, ::F) where {F <: Pack.AbstractStructFormat}
+      names = Pack.fieldnames($(target.type), F())
+      fexprs = map(names) do key
+        F = Base.get($formats, key, :(Pack.DefaultFormat))
+        Expr(:call, F)
+      end
+      formats = Expr(:tuple, fexprs...)
+      return formats
     end
   end
 end
-
-_isinformat(::Symbol) = false
-
-function _isinformat(ex::Expr)
-  return length(ex.args) == 3 && ex.head == :call && ex.args[1] == :in
-end
-
-function _splitinformat(ex::Expr)
-  if _isinformat(ex)
-    ex.args[2], ex.args[3]
-  end
-end
-
-function _parseinformat(ex)
-  res = _splitinformat(ex)
-  if !isnothing(res)
-    res[1], _injectmodule(res[2])
-  else
-    error("Expected syntax \"A\", \"A in B\" or \"A => B\" in Pack.@pack")
-  end
-end
-
-function _parsescopeformat(ex)
-  len = ex isa Symbol ? 0 : length(ex.args)
-  result = _parsescope(ex)
-  if isnothing(result)
-    ex, format = _parseinformat(ex)
-    (_parsescope(ex)..., format)
-  else
-    (result..., nothing)
-  end
-end
-
-#
-# process fields
-#
-
-function _parsefieldformat(ex)
-  ex, format = _parseinformat(ex)
-  if ex isa Symbol # a in F
-    [(ex, format)]
-  elseif ex.head in [:tuple, :vect] && all(isa.(ex.args, Symbol)) # (a, b) in F
-    map(name -> (name, format), ex.args)
-  else
-    error("Pack.@pack expected entry expression of form \"a [in F]\"")
-  end
-end
-
-function _parsefieldformats(args)
-  entries = (mapreduce(_parsefieldformat, vcat, args; init = []))
-  return (; entries...)
-end
-
-function _isselection(ex)
-  return ex isa Symbol || # a
-           (ex isa Expr && ex.head == :tuple) || # (a, b; c) is parsed as tuple
-           (ex isa Expr && ex.head == :block) || # (a; b) is not parsed as tuple but as block
-           (ex isa Expr && ex.head == :call && ex.args[1] != :in) # C(args...; kwargs...)
-end
-
-function _parseselection(ex)
-  constructor = nothing
-  if ex isa Symbol
-    names = ex
-    nkwargs = 0
-  elseif ex.head == :tuple # (...)
-    if ex.args[1] isa Expr && ex.args[1].head == :parameters # (args...; kwargs...)
-      names = [ex.args[2:end]; ex.args[1].args]
-      nkwargs = length(ex.args[1].args)
-    else # (args...)
-      names = ex.args
-      nkwargs = 0
-    end
-  elseif ex.head == :block && length(ex.args) == 3 # (a; b) not parsed as tuple
-    names = [ex.args[1], ex.args[3]]
-    nkwargs = 1
-  elseif ex.head == :call && ex.args[1] != :in
-    if ex.args[2] isa Expr && ex.args[2].head == :parameters # (args...; kwargs...)
-      names = [ex.args[3:end]; ex.args[2].args]
-      nkwargs = length(ex.args[2].args)
-      constructor = ex.args[1]
-    else # (args...)
-      names = ex.args[2:end]
-      nkwargs = 0
-      constructor = ex.args[1]
-    end
-  else
-    error("Pack.@pack expected entry list of form \"{field[s] in F, ...}\"")
-  end
-  @assert all(isa.(names, Symbol)) """
-  Pack.@pack expected symbols that reflect field selection names.
-  """
-  return Tuple(Symbol.(names)), nkwargs, constructor
-end
-
-#
-# main macro
-#
-
-##
-## TODO: Repair @pack RGBA{Float64} in MapFormat
-##
 
 """
-    @pack T [in format] [field format customization] [field selection]
+    consume_rules_argument(args)
+
+Try to consume an optional rules type argument for the [`@pack`](@ref) macro.
+Returns the consumed rule (if any) and the remaining arguments.
+"""
+function consume_rules_argument(args)
+  if is_type_expr(args[1])
+    args[1], args[2:end]
+  else
+    nothing, args
+  end
+end
+
+"""
+    consume_argument(f, args)
+
+Try to consume an argument via the parsing function `f`. Returns the  output of
+`f` (if any) and the remaining arguments.
+"""
+function consume_argument(f, args)
+  if isempty(args)
+    return (nothing, args)
+  end
+  ret = f(args[1])
+  if isnothing(ret)
+    return (nothing, args)
+  else
+    return (ret, args[2:end])
+  end
+end
+
+function parse_packmacro_arguments(args)
+  rules, args = consume_rules_argument(args)
+  @assert !isempty(args) "Format argument is missing in @pack macro."
+  informat, args = consume_argument(parse_informat_expr, args)
+  @assert !isnothing(informat) "Macro format expression cannot be parsed."
+  cons, args = consume_argument(parse_constructor_expr, args)
+  formats, args = consume_argument(parse_fieldformats_expr, args)
+  @assert isempty(args) "Invalid macro arguments: $args"
+  return (;
+    rules,
+    informat,
+    cons,
+    formats,
+  )
+end
+
+"""
+    @pack T in F
+    @pack {<: T} in F
+
+Convenience syntax for `Pack.format(::Type{T}) = F()` respectively
+`Pack.format(::Type{<: T}) = F()`.
+
+---
+
+    @pack R T in F
+    @pack R {<: T} in F
+
+Convenience syntax for `Pack.format(::Type{T}, R()) = F()` respectively `Pack.format(::Type{<: T}) = F()`. 
+
+---
+
+    @pack R informat (constructor args...) [field formats...]
+
+Generic packing macro for struct formats.
+
+The first expression `R <: Rules` is optional.
+The definitions enacted by the macro will be restricted to the rules
+object `R()`.
+
+The second expression `informat` can be an expression of the form `T in F` or
+`{<: T} in F` for a user specified type `T` and a given
+format type `F <: Format`.
+
+The (optional) constructor expression can take one of the forms
+
+- `(a, ...; b, ...)`, which implies a constructor `T(val_a, ...; c = val_c, ...)`
+  respectively `S(val_a, ...; c = val_c, ...)` where `{S <: T}` denotes a concrete
+  subtype of `T`. The entries `a, b, ...` are expected to correspond to
+  valid fieldnames of `T` (respectively `S`).
+- `A(a, ...; b, ...)` for a custom constructor object / function `A`. Note that this call to `A` must return an object of type `T` (respectively `S`).
+
+The (optional) field format expression is of the form `[a => Fa, b => Fb, ...]`,
+where `a, b, ...` denote fieldnames and `Fa, Fb, ...` the corresponding field
+format. For convenience, it is also possible to specify one format `F` for
+several keys `a, b, ...` via the syntax `[(a, b, ...) in F]`.
+
+!!! warning
+
+    The constructor and field format customizations that this macro offers
+    are only effectful for `StructFormat` and `UnorderedStructFormat`. Thus,
+    it only works as intended if the specified format `F` is built upon one of these formats
+    (e.g., `F = StructFormat` or `F = TypedFormat{UnorderedStructFormat}`).
+
+## Examples
+
+```julia
+using Pack
+
+struct A
+  a :: Int
+  b :: Vector{Float64}
+  c :: Vector{Float64}
+end
+
+A(a, b) = A(a, b, rand(5))
+
+@pack A in StructFormat (a, b) [b in BinVectorFormat]
+
+A(a, b; c) = A(a, b, c)
+
+@pack A in StructFormat (a, b; c) [(b, c) in BinVectorFormat]
+
+myA(a) = A(a, [], [])
+
+@pack A in StructFormat myA(a)
+```
 """
 macro pack(args...)
-  @assert length(args) >= 1 """
-  Pack.@pack expects at least one argument ($(length(args)) were given).
-  """
-  scopeformat_arg = args[1]
-  format_args = filter(_isinformat, args[2:end])
-  selection_arg = filter(_isselection, args[2:end])
+  r = parse_packmacro_arguments(args)
+  
+  target = r.informat.target
+  format = r.informat.format
+  statements = [code_informat(target, format).args...]
 
-  @assert length(selection_arg) <= 1 """
-  Pack.@pack found more than one field selection expression.
-  """
-  @assert length(format_args) + length(selection_arg) == length(args) - 1 """
-  Pack.@pack was unable to parse all argument expressions.
-  """
+  if !isnothing(r.cons)
+    names = r.cons.names
+    kwnames = r.cons.kwnames
+    constructor = r.cons.constructor
+    block = code_constructor(target, names, kwnames, constructor)
+    append!(statements, block.args)
+  end
 
-  # Extract the type scope that the packing rules apply to and the (optional)
-  # default format.
-  body = []
-  scope, tvar, fmt = _parsescopeformat(scopeformat_arg)
-
-  # If a default format has been specified in the macro, add the respective
-  # method to the body
-  if !isnothing(fmt)
-    if isnothing(tvar)
-      expr = :(Pack.format(::Type{$scope}) = $fmt())
+  if !isnothing(r.formats)
+    if isnothing(r.cons)
+      fieldnames = nothing
     else
-      expr = :(Pack.format(::Type{$tvar}) where {$scope} = $fmt())
+      fieldnames = (r.cons.names..., r.cons.kwnames...)
     end
-    push!(body, expr)
+    block = code_fieldformats(target, fieldnames, r.formats)
+    append!(statements, block.args)
   end
-
-  # If format_args and selection_arg are not empty, additional methods for
-  # Pack.destruct, Pack.construct, and Pack.valueformat will be defined.
-  # In this case, we introduce a typevariable (if non has been specified by
-  # the user).
-  if isnothing(tvar) && scope isa Symbol
-    tvar = gensym(:S)
-    scope = :($scope <: $tvar <: $scope)
-  elseif isnothing(tvar)
-    tvar = gensym(:S)
-    scope = Expr(:(<:), tvar, scope.args[1])
-  end
-
-  # Define the methods Pack.destruct and Pack.construct if an explicit
-  # field selection has been specified
-  if length(selection_arg) == 1
-    names, nkwargs, constructor = _parseselection(selection_arg[1])
-    destruct = quote
-      function Pack.destruct(value::$tvar, ::Pack.MapFormat) where {$scope}
-        return Pack._destruct(value, $names)
-      end
-    end
-    construct = quote
-      function Pack.construct(
-        ::Type{$tvar},
-        pairs,
-        ::Pack.MapFormat,
-      ) where {$scope}
-        return Pack._construct($tvar, pairs, $nkwargs, $constructor)
-      end
-    end
-    push!(body, destruct, construct)
-  end
-
-  # If either field selections or a field format customizations have been
-  # specified, the Pack.valueformat method has to be adapted, since the default
-  # cannot be assumed to work anymore
-  if length(selection_arg) > 0 || length(format_args) > 0
-    if isempty(selection_arg)
-      name = :(Base.fieldname($tvar, index))
-    else
-      name = :($names[index])
-    end
-    fieldformats = _parsefieldformats(format_args)
-    valuetype = quote
-      function Pack.valuetype(::Type{$tvar}, index) where {$scope}
-        name = $name
-        return Base.fieldtype($tvar, name)
-      end
-    end
-    valueformat = quote
-      function Pack.valueformat(::Type{$tvar}, index) where {$scope}
-        name = $name
-        return $(_valueformatexpr(:name, fieldformats))
-      end
-    end
-    push!(body, valuetype, valueformat)
-  end
-
-  @assert !isempty(body) "Pack.@pack has received no packing instructions"
-  return Expr(:block, body...) |> esc
-end
-
-function _valueformatexpr(name, fieldformats)
-  expr = nothing
-  level = nothing
-  for (key, format) in pairs(fieldformats)
-    if isnothing(expr)
-      expr = Expr(:if, :($name == $(QuoteNode(key))), :($format()))
-      level = expr
-    else
-      tmp = Expr(:elseif, :($name == $(QuoteNode(key))), :($format()))
-      push!(level.args, tmp)
-      level = tmp
-    end
-  end
-  if isempty(fieldformats)
-    expr = :(Pack.DefaultFormat())
-  else
-    push!(level.args, :(Pack.DefaultFormat()))
-  end
-  return expr
-end
-
-function _destruct(value::T, names) where {T}
-  Iterators.map(1:length(names)) do index
-    key = names[index]
-    val = getfield(value, key)
-    return (key, val)
-  end
-end
-
-function _construct(::Type{T}, pairs, nkwargs, constructor) where {T}
-  len = length(pairs)
-  @assert len >= nkwargs "inconsistent number of keyword arguments"
-  args = []
-  kwargs = []
-  for (index, pair) in enumerate(pairs)
-    if index <= len - nkwargs
-      push!(args, pair[2])
-    else
-      push!(kwargs, pair)
-    end
-  end
-  if isnothing(constructor)
-    T(args...; kwargs...)
-  else
-    constructor(args...; kwargs...)
-  end
+  
+  block = Expr(:block, statements...)
+  inject_rules!(block, r.rules)
+  inject_constraint!(block, target.constraint)
+  return esc(block)
 end

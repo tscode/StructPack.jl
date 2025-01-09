@@ -101,30 +101,45 @@ end
     a :: Nothing
     b :: String
     c :: Tuple{Int64, Float64}
+    d :: Bool
   end
 
-  val = A(nothing, "test", (10, 10.))
+  val = A(nothing, "test", (10, 10.), false)
 
-  for fmt in [Pack.MapFormat(), Pack.VectorFormat(), Pack.DynamicMapFormat(), Pack.DynamicVectorFormat()]
+  for fmt in [Pack.MapFormat(), Pack.VectorFormat(), Pack.DynamicMapFormat(), Pack.DynamicVectorFormat(), Pack.StructFormat(), Pack.UnorderedStructFormat()]
     @test packcycle(val, fmt = fmt)
   end
 
   @test_throws ErrorException Pack.pack(val)
 
-  Pack.format(::Type{A}) = Pack.MapFormat()
+  Pack.format(::Type{A}) = Pack.StructFormat()
   @test packcycle(val)
+end
+
+@testset "StructFormats" begin
+  struct B
+    a :: Int
+    b :: Float64
+    c :: String
+  end
+
+  val = B(5, 0., "test")
+
+  bytes = Pack.pack((a = 5, c = "test", b = 0.))
+  @test_throws Pack.UnpackError Pack.unpack(bytes, B, Pack.StructFormat())
+  @test val == Pack.unpack(bytes, B, Pack.UnorderedStructFormat())
 end
 
 @testset "TypedFormat" begin
   val = rand(Int64, 10)
   @test packcycle(val, Array, fmt = Pack.TypedFormat())
   
-  struct B
+  struct C
     a :: Tuple
     b :: AbstractString
   end
-  val = B((2, "test", 1e18), "This is a test")
-  Pack.valueformat(::Type{B}, index, ::Pack.TypedFormat) = Pack.TypedFormat()
+  val = C((2, "test", 1e18), "This is a test")
+  Pack.valueformat(::Type{C}, index, ::Pack.TypedFormat) = Pack.TypedFormat()
   @test packcycle(val, fmt = Pack.VectorFormat())
-  @test packcycle(val, Any, fmt = Pack.TypedFormat{Pack.MapFormat}())
+  @test packcycle(val, Any, fmt = Pack.TypedFormat{Pack.StructFormat}())
 end

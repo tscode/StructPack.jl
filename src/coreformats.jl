@@ -1,29 +1,10 @@
 
 """
-Core format.
-
-All core packing formats have a low-level implementation that complies with one
-or more formats of the msgpack specification.
-
-The following core formats are supported out of the box:
-
-- [`NilFormat`](@ref) (msgpack nil)
-- [`BoolFormat`](@ref) (msgpack boolean)
-- [`SignedFormat`](@ref) (msgpack negative / positive fixint, signed 8-64)
-- [`UnsignedFormat`](@ref) (msgpack positive fixint, unsigned 8-64)
-- [`StringFormat`](@ref) (msgpack fixstr, str 8-32)
-- [`VectorFormat`](@ref) (msgpack fixarray, array 16, array 32)
-- [`MapFormat`](@ref) (msgpack fixmap, map 16, map 32)
-- [`BinaryFormat`](@ref) (msgpack bin 16, bin 32)
-"""
-abstract type CoreFormat <: Format end
-
-"""
-    isformatbyte(byte, format::CoreFormat)
+    isformatbyte(byte, format::Format)
 
 Check if `byte` is compatible with `format`.
 """
-function isformatbyte(byte, ::CoreFormat)
+function isformatbyte(byte, ::Format)
   return error("No format byte is specified for this core format")
 end
 
@@ -33,17 +14,17 @@ end
 Throw an error indicating that `byte` is not compatible with `format`.
 """
 function byteerror(byte, ::F) where {F <: Format}
-  msg = "Invalid format byte $byte when unpacking value in format $F"
-  throw(ArgumentError(msg))
+  unpackerror("Invalid format byte $byte when unpacking value in format $F")
+  return
 end
 
 """
-Core format for packing nil / nothing values.
+Core format for packing nil values.
 
 Built upon the msgpack format `nil`.
 
 ## Defaults
-`NilFormat` is the default format of `Nothing`. Use
+[`NilFormat`](@ref) is the default format of `Nothing`. Use
 
     format(::Type{T}) = NilFormat()
 
@@ -51,20 +32,20 @@ or
 
     @pack T in NilFormat
 
-to make `NilFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`NilFormat`](@ref) the default format for type `T`. If `T` is abstract,
+use `{<: T}` to cover all subtypes.
 
 ## Packing
-All types can be packed in `NilFormat`.
+All types can be packed in [`NilFormat`](@ref).
 
 ## Unpacking
-To support unpacking values of type `T` packed in `NilFormat`, implement
+To support unpacking values of type `T` packed in [`NilFormat`](@ref), implement
   
     construct(::Type{T}, ::Nothing, ::NilFormat)::T
 
 or make sure that the constructor `T()` is defined.
 """
-struct NilFormat <: CoreFormat end
+struct NilFormat <: Format end
 
 function isformatbyte(byte, ::NilFormat)
   return byte == 0xc0
@@ -84,7 +65,6 @@ function unpack(io::IO, ::NilFormat, ::Rules)::Nothing
   end
 end
 
-# Default constructor
 construct(::Type{T}, ::Nothing, ::NilFormat) where {T} = T()
 
 """
@@ -93,7 +73,7 @@ Core format for packing boolean values.
 Built upon the msgpack format `boolean`.
 
 ## Defaults
-`BoolFormat` is the default format of `Bool`. Use
+[`BoolFormat`](@ref) is the default format of `Bool`. Use
 
     format(::Type{T}) = BoolFormat()
 
@@ -101,22 +81,23 @@ or
 
     @pack T in BoolFormat
 
-to make `BoolFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`BoolFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `BoolFormat`, implement
+To support packing values of type `T` in [`BoolFormat`](@ref), implement
 
     destruct(val::T, ::BoolFormat)::Bool
 
 ## Unpacking
-To support unpacking values of type `T` packed in `BoolFormat`, implement
+To support unpacking values of type `T` packed in [`BoolFormat`](@ref),
+implement
   
     construct(::Type{T}, ::Bool, ::BoolFormat)::T
 
 or make sure that the constructor `T(::Bool)` is defined.
 """
-struct BoolFormat <: CoreFormat end
+struct BoolFormat <: Format end
 
 function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
@@ -149,7 +130,7 @@ Built upon the msgpack formats `negative fixint`, `positive fixint`,
 `signed 8`, `signed 16`, `signed 32`, `signed 64`.
 
 ## Defaults
-`SignedFormat` is the default format of all subtypes of `Signed`. Use
+[`SignedFormat`](@ref) is the default format of all subtypes of `Signed`. Use
 
     format(::Type{T}) = SignedFormat()
 
@@ -157,22 +138,23 @@ or
 
     @pack T in SignedFormat
 
-to make `SignedFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`SignedFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `SignedFormat`, implement
+To support packing values of type `T` in [`SignedFormat`](@ref), implement
 
     destruct(val::T, ::SignedFormat)::Signed
 
 ## Unpacking
-To support unpacking values of type `T` packed in `SignedFormat`, implement
-  
+To support unpacking values of type `T` packed in [`SignedFormat`](@ref),
+implement
+
     construct(::Type{T}, ::Int64, ::SignedFormat)::T
 
 or make sure that the constructor `T(::Int64)` is defined.
 """
-struct SignedFormat <: CoreFormat end
+struct SignedFormat <: Format end
 
 function isformatbyte(byte, ::SignedFormat)
   return byte <= 0x7f ||  # positive fixint
@@ -241,7 +223,7 @@ Built upon the msgpack formats `positive fixint`, `unsigned 8`, `unsigned
 16`, `unsigned 32`, `unsigned 64`.
 
 ## Defaults
-`UnsignedFormat` is the default format of all subtypes of `Unsigned`. Use
+[`UnsignedFormat`](@ref) is the default format of all subtypes of `Unsigned`. Use
 
     format(::Type{T}) = UnsignedFormat()
 
@@ -249,22 +231,23 @@ or
 
     @pack T in UnsignedFormat
 
-to make `UnsignedFormat` the default format for type `T`. If `T` is abstract,
-use `{<: T}` to cover all subtypes.
+to make [`UnsignedFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `UnsignedFormat`, implement
+To support packing values of type `T` in [`UnsignedFormat`](@ref), implement
 
     destruct(val::T, ::UnsignedFormat)::Unsigned
 
 ## Unpacking
-To support unpacking values of type `T` packed in `UnsignedFormat`, implement
+To support unpacking values of type `T` packed in [`UnsignedFormat`](@ref), 
+implement
   
     construct(::Type{T}, ::UInt64, ::UnsignedFormat)::T
 
 or make sure that the constructor `T(::UInt64)` is defined.
 """
-struct UnsignedFormat <: CoreFormat end
+struct UnsignedFormat <: Format end
 
 function isformatbyte(byte, ::UnsignedFormat)
   return byte <= 0x7f ||  # positive fixint
@@ -318,7 +301,8 @@ Core format for packing float values.
 Built upon the msgpack formats `float 32`, `float 64`.
 
 ## Defaults
-`FloatFormat` is the default format for `Float16`, `Float32`, and `Float64`. Use
+[`FloatFormat`](@ref) is the default format for `Float16`, `Float32`, and
+`Float64`. Use
 
     format(::Type{T}) = FloatFormat()
 
@@ -326,22 +310,23 @@ or
 
     @pack T in FloatFormat
 
-to make `FloatFormat` the default format for type `T`. If `T` is abstract, use
+to make [`FloatFormat`](@ref) the default format for type `T`. If `T` is abstract, use
 `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `FloatFormat`, implement
+To support packing values of type `T` in [`FloatFormat`](@ref), implement
 
     destruct(val::T, ::FloatFormat)::Union{Float16, Float32, Float64}
 
 ## Unpacking
-To support unpacking values of type `T` packed in `FloatFormat`, implement
+To support unpacking values of type `T` packed in [`FloatFormat`](@ref), 
+implement
   
     construct(::Type{T}, ::Float64, ::FloatFormat)::T
 
 or make sure that the constructor `T(::Float64)` is defined.
 """
-struct FloatFormat <: CoreFormat end
+struct FloatFormat <: Format end
 
 function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
@@ -378,7 +363,7 @@ Core format for packing string values.
 Built upon the msgpack formats `fixstr`, `str 8`, `str 16`, `str 32`.
 
 ## Defaults
-`StringFormat` is the default format for `Symbol` and all subtypes of
+[`StringFormat`](@ref) is the default format for `Symbol` and all subtypes of
 `AbstractString`. Use
 
     format(:: Type{T}) = StringFormat()
@@ -387,11 +372,11 @@ or
 
     @pack T in StringFormat
 
-to make `StringFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`StringFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `StringFormat`, implement
+To support packing values of type `T` in [`StringFormat`](@ref), implement
 
     destruct(val::T, ::StringFormat)::R
 
@@ -399,13 +384,14 @@ where the returned value `ret::R` must implement `sizeof(ret)` (number of
 bytes) as well as `write(io, ret)`.
 
 ## Unpacking
-To support unpacking values of type `T` packed in `StringFormat`, implement
+To support unpacking values of type `T` packed in [`StringFormat`](@ref),
+implement
   
     construct(:: Type{T}, ::String, ::StringFormat)::T
 
 or make sure that `convert(T, ::String)` is defined.
 """
-struct StringFormat <: CoreFormat end
+struct StringFormat <: Format end
 
 function isformatbyte(byte, ::StringFormat)
   return 0xa0 <= byte <= 0xbf || # fixstr
@@ -459,7 +445,7 @@ Core format for packing binary values.
 Built upon the msgpack formats `bin 8`, `bin 16`, `bin 32`.
 
 ## Defaults
-`BinaryFormat` is the default format for `Pack.Bytes`. Use
+Use
 
     format(::Type{T}) = BinaryFormat()
 
@@ -467,11 +453,11 @@ or
 
     @pack T in BinaryFormat
 
-to make `BinaryFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`BinaryFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `BinaryFormat`, implement
+To support packing values of type `T` in [`BinaryFormat`](@ref), implement
 
     destruct(val::T, ::BinaryFormat)::R
 
@@ -479,7 +465,8 @@ where the returned value `ret::R` must implement `sizeof(ret)` (number of
 bytes) as well as `write(io, ret)`.
 
 ## Unpacking
-To support unpacking values of type `T` packed in `BinaryFormat`, implement
+To support unpacking values of type `T` packed in [`BinaryFormat`](@ref), 
+implement
   
     construct(::Type{T}, ::Vector{UInt8}, ::BinaryFormat)::T
 
@@ -530,7 +517,7 @@ Core format for packing vector values.
 Built upon the msgpack formats `fixarray`, `array 16`, `array 32`.
 
 ## Defaults
-`VectorFormat` is the default format for subtypes of `Tuple` and
+[`VectorFormat`](@ref) is the default format for subtypes of `Tuple` and
 `AbstractVector`. Use
 
     format(::Type{T}) = VectorFormat()
@@ -539,25 +526,27 @@ or
 
     @pack T in VectorFormat
 
-to make `VectorFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`VectorFormat`](@ref) the default format for type `T`. If `T` is
+abstract, use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `VectorFormat`, implement
+To support packing values of type `T` in [`VectorFormat`](@ref), implement
 
     destruct(val::T, ::VectorFormat)::R
 
-where the returned value `ret::R` must implement `length(ret)` (number of
-entries) and must be iterable. The formats of the entries of `val` are
-determined via [`valueformat`](@ref).
+where the returned value `ret::R` must implement `Base.length(ret)` (number
+of entries) and must be iterable. The formats of the entries of `val` are
+determined via [`valueformat`](@ref), where `state` is the linear index.
 
 ## Unpacking
-To support unpacking values of type `T` packed in `VectorFormat`, implement
+To support unpacking values of type `T` packed in [`VectorFormat`](@ref), 
+implement
   
     construct(::Type{T}, values::Generator{T}, ::VectorFormat)::T
 
 or make sure that the constructor `T(values::Generator{T})` is defined (see
-[`Generator`](@ref)). The respective types and formats of the entries of `values` are determined via [`valuetype`](@ref) and [`valueformat`](@ref).
+[`Generator`](@ref)). The respective types and formats of the entries of `values` are determined via [`valuetype`](@ref) and [`valueformat`](@ref),
+where `state` is the linear index.
 
 !!! warning
 
@@ -568,7 +557,7 @@ or make sure that the constructor `T(values::Generator{T})` is defined (see
     same reason, you should not store the object `values` and access it at a
     later time.
 """
-struct VectorFormat <: Format end
+struct VectorFormat <: AbstractVectorFormat end
 
 function isformatbyte(byte, ::VectorFormat)
   return 0x90 <= byte <= 0x9f || # fixarray
@@ -591,7 +580,7 @@ function writeheaderbytes(io::IO, val, ::VectorFormat)
   end
 end
 
-function readheaderbytes(io::IO, ::VectorFormat)::Int
+function readheaderbytes(io::IO, fmt::VectorFormat)::Int
   byte = read(io, UInt8)
   if byte & 0xf0 == 0x90 # fixarray
     return byte & 0x0f
@@ -641,7 +630,7 @@ Core format for packing map / dictionary values.
 Built upon the msgpack formats `fixmap`, `map 16`, `map 32`.
 
 ## Defaults
-`MapFormat` is the default format for subtypes of `NamedTuple` and `Dict`. Use
+[`MapFormat`](@ref) is the default format for subtypes of `NamedTuple` and `Dict`. Use
 
     format(::Type{T}) = MapFormat()
 
@@ -649,29 +638,30 @@ or
 
     @pack T in MapFormat
 
-to make `MapFormat` the default format for type `T`. If `T` is abstract, use
-`{<: T}` to cover all subtypes.
+to make [`MapFormat`](@ref) the default format for type `T`. If `T` is abstract,
+use `{<: T}` to cover all subtypes.
 
 ## Packing
-To support packing values of type `T` in `MapFormat`, implement
+To support packing values of type `T` in [`MapFormat`](@ref), implement
 
     destruct(val::T, ::MapFormat)::R
 
-where the returned value `ret::R` must implement `length(ret)` (number of
-entries) and must be iterable with pairs as entries. The key / value formats
-of the entries of `val` are determined via [`keyformat`](@ref) and
-[`valueformat`](@ref).
+where the returned value `ret::R` must implement `Base.length(ret)` (number of
+entries) and must be iterable with key-value pairs as entries. The key / value
+formats of the entries of `val` are determined via [`keyformat`](@ref) and
+[`valueformat`](@ref), where `state` is the linear index.
 
 ## Unpacking
-To support unpacking values of type `T` packed in `MapFormat`, implement
+To support unpacking values of type `T` packed in [`MapFormat`](@ref), 
+implement
   
     construct(::Type{T}, pairs::Generator{T}, ::MapFormat)::T
 
 or make sure that the constructor `T(pairs::Generator{T})` is defined (see
 [`Generator`](@ref)), where `pairs` will contain key-value pairs as
 entries. The respective types and formats of the keys and values are determined
-during unpacking via [`keytype`](@ref), [`valuetype`](@ref),
-[`keyformat`](@ref) and [`valueformat`](@ref).
+during unpacking via [`keytype`](@ref), [`valuetype`](@ref), [`keyformat`](@ref)
+and [`valueformat`](@ref), where `state` is the linear index.
 
 !!! warning
 
@@ -682,7 +672,7 @@ during unpacking via [`keytype`](@ref), [`valuetype`](@ref),
     the same reason, you should not store the object `pairs` and access it at a
     later time.
 """
-struct MapFormat <: Format end
+struct MapFormat <: AbstractMapFormat end
 
 function isformatbyte(byte, ::MapFormat)
   return 0x80 <= byte <= 0x8f || # fixmap
@@ -705,7 +695,7 @@ function writeheaderbytes(io::IO, val, ::MapFormat)
   end
 end
 
-function readheaderbytes(io::IO, ::MapFormat)::Int
+function readheaderbytes(io::IO, fmt::MapFormat)::Int
   byte = read(io, UInt8)
   if byte & 0xf0 == 0x80
     return byte & 0x0f
@@ -719,17 +709,15 @@ function readheaderbytes(io::IO, ::MapFormat)::Int
 end
 
 function pack(io::IO, value::T, fmt::MapFormat, rules::Rules) where {T}
-  val = destruct(value, fmt, rules)
-  writeheaderbytes(io, val, fmt)
-  state = iterstate(T, fmt, rules)
-  for entry in val
+  pairs = destruct(value, fmt, rules)
+  writeheaderbytes(io, pairs, fmt)
+  for (state, pair) in enumerate(pairs)
     fmt_key = keyformat(T, state, fmt, rules)
     fmt_val = valueformat(T, state, fmt, rules)
-    pack(io, first(entry), fmt_key, rules)
-    pack(io, last(entry), fmt_val, rules)
-    state = iterstate(T, state, entry, fmt, rules)
+    pack(io, first(pair), fmt_key, rules)
+    pack(io, last(pair), fmt_val, rules)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::Type{T}, fmt::MapFormat, rules::Rules)::T where {T}
@@ -741,10 +729,9 @@ function unpack(io::IO, ::Type{T}, fmt::MapFormat, rules::Rules)::T where {T}
     fmt_val = valueformat(T, state, fmt, rules)
     key = unpack(io, K, fmt_key, rules)
     value = unpack(io, V, fmt_val, rules)
-    entry = key=>value
-    return entry
+    return key=>value
   end
-  return construct(T, Generator{T}(pairs), MapFormat(), rules)
+  return construct(T, Generator{T}(pairs), fmt, rules)
 end
 
 # Support for generic unpacking / AnyFormat

@@ -1,5 +1,4 @@
 
-
 """
     iterstate(T::Type, fmt::Format [, rules::Rules])
     
@@ -33,7 +32,7 @@ This approach enables 'dynamic' unpacking where the type / format of an entry
 depends on the values unpacked previously. The format [`TypedFormat`](@ref)
 exploits this pattern.
 """
-iterstate(T::Type, state::Int, entry, ::Format) = state + 1
+iterstate(::Type, state::Int, entry, ::Format) = state + 1
 
 function iterstate(T::Type, state, entry, fmt::Format, ::Rules)
   return iterstate(T, state, entry, fmt)
@@ -55,9 +54,7 @@ past entries via overloading [`iterstate`](@ref).
     [`DynamicVectorFormat`](@ref) and absorb its functionality into
     [`VectorFormat`](@ref).
 """
-struct DynamicVectorFormat <: Format end
-
-const AnyVectorFormat = Union{VectorFormat, DynamicVectorFormat}
+struct DynamicVectorFormat <: AbstractVectorFormat end
 
 function pack(io::IO, value::T, fmt::DynamicVectorFormat, rules::Rules) where {T}
   val = destruct(value, fmt, rules)
@@ -99,7 +96,7 @@ past entries via overloading [`iterstate`](@ref).
     In the future, we might thus deprecate [`DynamicMapFormat`](@ref) and absorb
     its functionality into [`MapFormat`](@ref).
 """
-struct DynamicMapFormat <: Format end
+struct DynamicMapFormat <: AbstractMapFormat end
 
 const AnyMapFormat = Union{MapFormat, DynamicMapFormat}
 

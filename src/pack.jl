@@ -2,13 +2,51 @@
 """
 Abstract format type.
 
-Formats are responsible for reducing the packing and unpacking of julia values
-to msgpack primitives.
+Formats determine the rules for packing and unpacking values via msgpack
+primitives. They are supposed to be singleton types.
+
+To add support for a new format `F <: Format`, define the corresponding
+methods of [`pack`](@ref) and [`unpack`](@ref).
+
+This package comes with a number of built-in formats. The following core formats
+have low-level implementations that build upon one or more formats of the
+msgpack specification:
+
+- [`NilFormat`](@ref) (msgpack nil),
+- [`BoolFormat`](@ref) (msgpack boolean),
+- [`SignedFormat`](@ref) (msgpack negative / positive fixint, signed 8-64),
+- [`UnsignedFormat`](@ref) (msgpack positive fixint, unsigned 8-64),
+- [`StringFormat`](@ref) (msgpack fixstr, str 8-32),
+- [`BinaryFormat`](@ref) (msgpack bin 16, bin 32).
+
+For vector-like and map-like objects, several built-in formats with different
+benefits and drawbacks are provided as subtypes of
+
+- [`AbstractVectorFormat`](@ref) (msgpack fixarray, array 16, array 32),
+- [`AbstractMapFormat`](@ref) (msgpack fixmap, map 16, map 32).
+
+Additional convenience formats include
+
+- [`ArrayFormat`](@ref) (store multidimensional arrays),
+- [`BinVectorFormat`](@ref) (store vectors with bitstype elements efficiently),
+- [`BinArrayFormat`](@ref) (store multidimensional bitstype arrays efficiently),
+- [`TypedFormat`](@ref) (store values and their type for generic unpacking).
 """
 abstract type Format end
 
 """
-Abstract Rules type.
+Umbrella type for [`VectorFormat`](@ref) and [`DynamicVectorFormat`](@ref).
+"""
+abstract type AbstractVectorFormat <: Format end
+
+"""
+Umbrella type for [`MapFormat`](@ref), [`DynamicMapFormat`](@ref), and
+[`AbstractStructFormat`](@ref).
+"""
+abstract type AbstractMapFormat <: Format end
+
+"""
+Abstract rules type.
 
 Rules are introduced to enforce custom behavior when packing and unpacking
 values.
@@ -21,10 +59,10 @@ unpacking (via [`destruct`](@ref) and [`construct`(@ref)]).
 abstract type Rules end
 
 """
-Default rules that call fallback implementations.
+Rules object that directs packing / unpacking towards fallback implementations.
 
-This is primarily a auxiliary type and should in most cases not come into
-contact with users of Pack.jl.
+This is an auxiliary type and should not come into contact with users of the
+package.
 
 !!! warn
 
@@ -42,13 +80,27 @@ Scoped value that captures the active packing rules.
 const rules = ScopedValue{Rules}(FallbackRules())
 
 """
-    format(T::Type [, rules::Rules])
-    format(::T [, rules::Rules])
+Error that is thrown when unpacking fails due to unexpected data.
+"""
+struct UnpackError <: Exception
+  msg::String
+end
 
-Return the format associated to type `T` in `rules`.
+"""
+    unpackerror(msg)
+
+Throw an [`UnpackError`](@ref) with message `msg`.
+"""
+unpackerror(msg) = throw(UnpackError(msg))
+
+"""
+    format(T::Type [, rules::Rules])::Format
+    format(::T [, rules::Rules])::Format
+
+Return the format associated to type `T` under `rules`.
 
 The rules-free version of this method must be implemented in order for `pack(io,
-value :: T)` and `unpack(io, T)` to work. It is used as fallback for all rules.
+value::T)` and `unpack(io, T)` to work. It is used as fallback for all rules.
 
 See also [`Format`](@ref) and [`DefaultFormat`](@ref).
 """
@@ -59,7 +111,7 @@ end
 # Support calling format on values
 format(::T, args...) where {T} = format(T, args...)
 
-# Specialize this function to select custom formats in your rules
+# Specialize this method to select custom formats in your rules
 format(T::Type, ::Rules) = format(T)
 
 """
@@ -146,7 +198,8 @@ function unpack(io::IO, ::Type{T}, fmt::Format, rules::Rules = Pack.rules[]) whe
 end
 
 function unpack(::IO, fmt::Format, rules::Rules = Pack.rules[])
-  ArgumentError("Generic unpacking in format $fmt not supported") |> throw
+  unpackerror("Generic unpacking in format $fmt not supported")
+  return
 end
 
 function unpack(bytes::Vector{UInt8}, args...)
@@ -186,14 +239,9 @@ end
 Return the type of the key at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
-This method is called when unpacking values in [`MapFormat`](@ref) and
-[`DynamicMapFormat`](@ref).
-
-By default, the argument `state` equals the index in the key enumeration.
-For [`DynamicMapFormat`](@ref), `state` is initialized and iterated by
-[`iterstate`](@ref).
+This method is called when unpacking values in [`AbstractMapFormat`](@ref).
 """
-keytype(::Type, state, ::Format) = Symbol # default to support structs
+keytype(::Type, state, ::Format) = Symbol # default to support generic structs
 keytype(T::Type, state, fmt::Format, ::Rules) = keytype(T, state, fmt)
 
 """
@@ -202,14 +250,10 @@ keytype(T::Type, state, fmt::Format, ::Rules) = keytype(T, state, fmt)
 Return the format of the key at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
-This method is called when packing or unpacking values in [`MapFormat`](@ref) 
-and [`DynamicMapFormat`](@ref).
-
-By default, the argument `state` equals the index in the key enumeration.
-For [`DynamicMapFormat`](@ref), `state` is initialized and iterated by
-[`iterstate`](@ref).
+This method is called when packing or unpacking values in
+[`AbstractMapFormat`](@ref).
 """
-keyformat(T::Type, state, ::Format) = DefaultFormat()
+keyformat(::Type, state, ::Format) = DefaultFormat()
 keyformat(T::Type, state, fmt::Format, ::Rules) = keyformat(T, state, fmt)
 
 """
@@ -218,12 +262,8 @@ keyformat(T::Type, state, fmt::Format, ::Rules) = keyformat(T, state, fmt)
 Return the type of the value at iteration state `state` when saving the entries
 of `T` in format `fmt`.
 
-This method is used when unpacking values in [`VectorFormat`](@ref) and
-[`MapFormat`](@ref) or their dynamic counterparts.
-
-By default, the argument `state` equals the index in the value enumeration.
-For [`DynamicVectorFormat`](@ref) and [`DynamicMapFormat`](@ref), it is
-initialized and iterated by [`iterstate`](@ref).
+This method is used when unpacking values in [`AbstractVectorFormat`](@ref) and
+[`AbstractMapFormat`](@ref).
 """
 valuetype(T::Type, state, ::Format) = Base.fieldtype(T, state)
 valuetype(T::Type, state, fmt::Format, ::Rules) = valuetype(T, state, fmt)
@@ -234,12 +274,8 @@ valuetype(T::Type, state, fmt::Format, ::Rules) = valuetype(T, state, fmt)
 Return the format of the value at iteration state `state` when saving the
 entries of `T` in format `fmt`.
 
-This method is used when packing or unpacking values in [`VectorFormat`](@ref)
-and [`MapFormat`](@ref) or their dynamic counterparts.
-
-By default, the argument `state` equals the index in the value enumeration.
-For [`DynamicVectorFormat`](@ref) and [`DynamicMapFormat`](@ref), it is
-initialized and iterated by [`iterstate`](@ref).
+This method is used when packing or unpacking values in
+[`AbstractVectorFormat`](@ref) and [`AbstractMapFormat`](@ref).
 """
 valueformat(::Type, state, ::Format) = DefaultFormat()
 valueformat(T::Type, state, fmt::Format, ::Rules) = valueformat(T, state, fmt)
