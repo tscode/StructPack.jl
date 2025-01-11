@@ -1,5 +1,5 @@
 
-# Pack.jl
+# StructPack.jl
 
 This package is for people who want to efficiently serialize their beloved
 structures in a simple and transparent way. It operates on top of the binary
@@ -14,7 +14,7 @@ You might like this package because it
 - is reasonably fast.
 - produces sound msgpack files that can be read universally.
 
-On the other hand, Pack.jl is (probably) not the right choice if you
+On the other hand, StructPack.jl is (probably) not the right choice if you
  
 - need to serialize arbitrary julia objects out-of-the-box.
 - have enormous files and need lazy loading capabilities.
@@ -23,37 +23,12 @@ On the other hand, Pack.jl is (probably) not the right choice if you
 While the functionality to read generic msgpack is included (currently without
 support for extensions), you should in this case also consider the excellent
 package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which serves as
-inspiration for Pack.jl.
+inspiration for StructPack.jl.
 
-## Rationale
-
-**A lot** of options already exist in julia for data serialization. Besides
-the `Serialization` module in `Base`, this includes
-[JLD.jl](https://github.com/JuliaIO/JLD.jl),
-[JLD2.jl](https://github.com/JuliaIO/JLD2.jl),
-[JSON.jl](https://github.com/JuliaIO/JSON.jl),
-[JSON3.jl](https://github.com/quinnj/JSON3.jl),
-[BSON.jl](https://github.com/JuliaIO/BSON.jl),
-[Serde.jl](https://github.com/bhftbootcamp/Serde.jl),
-[MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), and probably many others.
-So why does this additional package deserve to exist?
-
-Well, no reason in particular. But in previous projects, I often found myself
-in situations where I wanted to permanantly, reliably and efficiently store
-custom julia structs that contained binary data. Loading should not be able to
-execute arbitrary code, since I would not always trust the source. At the same
-time, I wanted enough flexibility to reconstruct a value based on abstract type
-information only, in a controlled way.
-
-Oh, and the interface should be straightforward. And the code base should be
-transparent and avoid complexities, as far as possible. Ideally, it should also
-be compatible to a universally used format. And thus, this package was born.
-
-## Concepts
-
-Have a look at this snippet of code:
+## 
+The following snippet of code demonstrates some of the features of StructPack.jl.
 ```julia
-import Pack: MapFormat, VectorFormat, BinArrayFormat
+using StructPack
 
 abstract type A end
 
@@ -74,70 +49,85 @@ end
 
 D(d; b) = D("default", b, d)
 
-
-Pack.@pack begin
-  {<: A} in MapFormat
-  D in MapFormat D(d; b) [b in BinArrayFormat, d in TypedFormat]
-end
+@pack {<: A} in StructFormat
+@pack D in StructFormat D(d; b) [b in BinArrayFormat, d in TypedFormat]
 ```
+For more examples and detailed information about about usage, see the package
+documentation.
 
-For more examples and information about usage, see the package documentation.
+## Rationale
 
-#### Booh! I hate macros :(
+Julia already offers a wealth of packages that can be used for data serialization and storage. Besides `Base.Serialization`, this includes
+[JLD.jl](https://github.com/JuliaIO/JLD.jl),
+[JLD2.jl](https://github.com/JuliaIO/JLD2.jl),
+[JSON.jl](https://github.com/JuliaIO/JSON.jl),
+[JSON3.jl](https://github.com/quinnj/JSON3.jl),
+[BSON.jl](https://github.com/JuliaIO/BSON.jl),
+[Serde.jl](https://github.com/bhftbootcamp/Serde.jl),
+[MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), and likely many others.
+So why does StructPack.jl deserve to exist?
 
-If you are not happy with the `@pack` macro, the following code will reproduce
-the same functionality:
-```julia
-# @pack {<: A} in MapFormat
-Pack.format(Type{<: A}) = MapFormat()
+In previous projects, I often found myself in situations where I wanted to
+permanantly, reliably and efficiently store custom julia structs that contained
+binary data. Loading should not be able to execute arbitrary code, since I would
+not always trust the source. At the same time, I wanted enough flexibility to
+reconstruct a value based on abstract type information only, in a controlled
+way.
 
-# @pack D in MapFormat ...
-Pack.format(Type{<: B}) = MapFormat()
+Oh, and the interface should be straightforward. And the code base should be
+transparent and avoid complexities, as far as possible. Ideally, it should also
+be compatible to a universally used format.
 
-# ... D(b, d) ...
-Pack.destruct(val::D, ::MapFormat) = (val.b, val.d) # only store b and d
-Pack.construct(::Type{D}, vals, ::MapFormat) = D(vals[1][2]; b = vals[2][2])
-Pack.valuetype(::Type{D}, index, ::MapFormat) = index == 1 ? Matrix{B} : A
+Thus, this package was born. May it help you.
 
-# ... [b in BinArrayFormat, d in TypedFormat]
-Pack.valueformat(::Type{D}, index, ::MapFormat) = index == 1 ? BinArrayFormat() : TypedFormat()
 
-# Allow constructors of A to be called when unpacking in TypedFormat
-Pack.whitelisted(::Type{<:A}) = true
-```
+<!-- #### Are macros necessary? -->
 
-<!-- ## Benchmarks -->
+<!-- If you are not happy with the `@pack` macro due to its intransparency or -->
+<!-- limitations, the following will establish the same functionality: -->
+<!-- ```julia -->
+<!-- # @pack {<: A} in StructFormat -->
+<!-- StructPack.format(Type{<: A}) = StructFormat() -->
 
-<!-- I know, I know, julia folks are addicted to performance. However, performance is not the primary goal of Pack.jl. Decent performance is -->  
+<!-- # @pack D in StructFormat ... -->
+<!-- StructPack.format(Type{<: B}) = StructFormat() -->
 
-## Answers to be questioned
+<!-- # ... D(d; b) ... -->
+<!-- StructPack.destruct(val::D, ::StructFormat) = (:d=>val.d, b=>val.+) -->
+<!-- StructPack.construct(::Type{D}, pairs, ::StructFormat) = D(pairs[1][2]; b = pairs[2][2]) -->
+<!-- StructPack.fieldtypes(::Type{D}, ::StructFormat) = (Matrix{B}, A) -->
 
-> Is this package well-tested, performance optimized, and 100% production ready?
+<!-- # ... [b in BinArrayFormat, d in TypedFormat] -->
+<!-- StructPack.fieldformats(::Type{D}, ::StructFormat) = (BinArrayFormat(), TypedFormat()) -->
 
-Well... no. None of the three, probably. But the design should be fixed and the
-API stable. Features that are currently not supported are unlikely to make it
-into a future release. Unless they fit neatly and don't increase code complexity
-by much.
+<!-- ## Answers to be questioned -->
 
-What will make it into future releases is a better out-of-the-box support for
-types in `Base`, which is currently very limited but which is easily extensible.
-Also, support for additional popular types can easily be added via package
-extensions. I will patiently be waiting for corresponding issues and pull
-requests.
+<!-- > Is this package well-tested, performance optimized, and 100% production ready? -->
 
-> Can I trust you that `unpack` does not let chaos and havoc in my digital world?
+<!-- Well... no. None of the three, probably. But the design should be fixed and the -->
+<!-- API stable. Features that are currently not supported are unlikely to make it -->
+<!-- into a future release. Unless they fit neatly and don't increase code complexity -->
+<!-- by much. -->
 
-Certainly not! I tried my best to prevent uncontrolled code execution (by never
-using `eval` and by making sure that types are whitelisted before calling their
-constructors in `TypedFormat`), but maybe this is not enough. Also, another
-package you load and whose data you want to store may extend Pack.jl in a way
-that is nasty. So the honest answer is: I don't know.
+<!-- What will make it into future releases is a better out-of-the-box support for -->
+<!-- types in `Base`, which is currently very limited but which is easily extensible. -->
+<!-- Also, support for additional popular types can easily be added via package -->
+<!-- extensions. I will patiently be waiting for corresponding issues and pull -->
+<!-- requests. -->
 
-> It is a bummer that you cannot load structs when the ordering in the msgpack file is not correct...
+<!-- > Can I trust you that `unpack` does not let chaos and havoc in my digital world? -->
 
-I tend to agree. It would be easy to solve this problem with a new format,
-but I am currently not sure about the best way to incorporate this. The main
-hinderance is that such a potential `UnorderedMapFormat` has to be less general
-than `MapFormat`, since the type and formats of the key objects cannot be easily
-determined. It should thus probably be implemented as `UnorderedStructFormat`
-and expect symbols as keys. Along this line, one could also implement `StructFormat`, which is `MapFormat` specialized to symbols as keys.
+<!-- Certainly not! I tried my best to prevent uncontrolled code execution (by never -->
+<!-- using `eval` and by making sure that types are whitelisted before calling their -->
+<!-- constructors in `TypedFormat`), but maybe this is not enough. Also, another -->
+<!-- package you load and whose data you want to store may extend StructPack.jl in a way -->
+<!-- that is nasty. So the honest answer is: I don't know. -->
+
+<!-- > What if I read external msgpack files? Can I generically load them? -->
+
+<!-- I tend to agree. It would be easy to solve this problem with a new format, -->
+<!-- but I am currently not sure about the best way to incorporate this. The main -->
+<!-- hinderance is that such a potential `UnorderedMapFormat` has to be less general -->
+<!-- than `MapFormat`, since the type and formats of the key objects cannot be easily -->
+<!-- determined. It should thus probably be implemented as `UnorderedStructFormat` -->
+<!-- and expect symbols as keys. Along this line, one could also implement `StructFormat`, which is `MapFormat` specialized to symbols as keys. -->
