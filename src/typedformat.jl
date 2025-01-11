@@ -2,8 +2,8 @@
 """
 Whitelist type.
 
-A whitelist can be activated via assigning to the scoped value
-[`Pack.whitelist`](@ref).
+A whitelist can be activated via assigning a whitelist object (or a list of
+types) to the scoped value [`StructPack.whitelist`](@ref).
 """
 abstract type Whitelist end
 
@@ -271,7 +271,7 @@ function unpack(io::IO, T::Type, ::TypedFormat{F}, rules::Rules) where {F <: For
   return tval.value
 end
 
-function unpack(io::IO, fmt::TypedFormat, rules::Rules = Pack.rules[])
+function unpack(io::IO, fmt::TypedFormat, rules::Rules = StructPack.rules[])
   return unpack(io, Any, fmt, rules)
 end
 

@@ -154,17 +154,17 @@ Create a binary msgpack representation of `value` according to the given format
 
 If no format is provided, it is derived from the type of `value` via
 `format(typeof(value), rules)`. The rules default to the value hold by
-[`Pack.rules`](@ref).
+[`StructPack.rules`](@ref).
 
 If both a format and rules are provided, `fmt` is used for packing `value`
 while `rules` is passed along to deeper packing related calls.
 """
-function pack(io::IO, value::T, rules::Rules = Pack.rules[])::Nothing where {T}
+function pack(io::IO, value::T, rules::Rules = StructPack.rules[])::Nothing where {T}
   return pack(io, value, format(T, rules), rules)
 end
 
 function pack(io::IO, value::T, fmt::Format)::Nothing where {T}
-  return pack(io, value, fmt, Pack.rules[])
+  return pack(io, value, fmt, StructPack.rules[])
 end
 
 function pack(value::T, args...)::Vector{UInt8} where {T}
@@ -186,18 +186,18 @@ from a byte vector `bytes` or a stream `io`. The returned value is guaranteed to
 be of type `T`.
 
 If no format is provided, it is derived from `T` via `format(T, rules)`.
-The rules default to the value hold by [`Pack.rules`](@ref).
+The rules default to the value hold by [`StructPack.rules`](@ref).
 """
-function unpack(io::IO, ::Type{T}, rules::Rules = Pack.rules[])::T where {T}
+function unpack(io::IO, ::Type{T}, rules::Rules = StructPack.rules[])::T where {T}
   return unpack(io, T, format(T, rules), rules)
 end
 
-function unpack(io::IO, ::Type{T}, fmt::Format, rules::Rules = Pack.rules[]) where {T}
+function unpack(io::IO, ::Type{T}, fmt::Format, rules::Rules = StructPack.rules[]) where {T}
   val = unpack(io, fmt, rules)
   return construct(T, val, fmt, rules)
 end
 
-function unpack(::IO, fmt::Format, rules::Rules = Pack.rules[])
+function unpack(::IO, fmt::Format, rules::Rules = StructPack.rules[])
   unpackerror("Generic unpacking in format $fmt not supported")
   return
 end

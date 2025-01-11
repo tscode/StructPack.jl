@@ -33,8 +33,8 @@ end
 
 function pack(io::IO, value::T, fmt::AbstractStructFormat, rules::Rules) where {T}
   pairs = destruct(value, fmt, rules)
-  Pack.writeheaderbytes(io, pairs, MapFormat())
-  fmts = Pack.fieldformats(T, fmt)
+  writeheaderbytes(io, pairs, MapFormat())
+  fmts = fieldformats(T, fmt)
   for (index, pair) in enumerate(pairs)
     fmt_val = fmts[index]
     pack(io, first(pair), StringFormat(), rules)
@@ -101,10 +101,10 @@ the keys encountered during unpacking are consistent with `T`.
 struct StructFormat <: AbstractStructFormat end
 
 function unpack(io::IO, ::Type{T}, fmt::StructFormat, rules::Rules)::T where {T}
-  n = Pack.readheaderbytes(io, MapFormat())
-  names = Pack.fieldnames(T, fmt)
-  fmts = Pack.fieldformats(T, fmt)
-  types = Pack.fieldtypes(T, fmt)
+  n = readheaderbytes(io, MapFormat())
+  names = fieldnames(T, fmt)
+  fmts = fieldformats(T, fmt)
+  types = fieldtypes(T, fmt)
   @assert n == length(fmts) == length(types) """
   Unexpected number of fields encountered.
   """
@@ -138,10 +138,10 @@ unpacked from the msgpack map. To use a keyword-argument based constructor, simp
 struct UnorderedStructFormat <: AbstractStructFormat end
 
 function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, rules ::Rules)::T where {T}
-  n = Pack.readheaderbytes(io, MapFormat())
-  names = Pack.fieldnames(T, fmt)
-  fmts = Pack.fieldformats(T, fmt)
-  types = Pack.fieldtypes(T, fmt)
+  n = readheaderbytes(io, MapFormat())
+  names = fieldnames(T, fmt)
+  fmts = fieldformats(T, fmt)
+  types = fieldtypes(T, fmt)
   @assert n == length(fmts) == length(types) """
   Unexpected number of fields encountered.
   """

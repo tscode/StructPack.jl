@@ -152,7 +152,7 @@ end
 
 function code_informat(target, format)
   return quote 
-    function Pack.format(::Type{$(target.type)})
+    function StructPack.format(::Type{$(target.type)})
       return $format() 
     end
   end
@@ -218,13 +218,13 @@ function code_constructor(target, names, kwnames, constructor)
   lenkw = length(kwnames)
 
   return quote
-    function Pack.destruct(val::$(target.type), fmt::Pack.AbstractStructFormat)
+    function StructPack.destruct(val::$(target.type), fmt::StructPack.AbstractStructFormat)
       Iterators.map($symbols) do name
         name=>getfield(val, name)
       end
     end
 
-    function Pack.construct(::Type{$(target.type)}, pairs::Vector, fmt::Pack.AbstractStructFormat)
+    function StructPack.construct(::Type{$(target.type)}, pairs::Vector, fmt::StructPack.AbstractStructFormat)
       if length(pairs) != length($symbols) 
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
@@ -233,7 +233,7 @@ function code_constructor(target, names, kwnames, constructor)
       $constructor(args...; kwargs...)
     end
 
-    function Pack.construct(::Type{$(target.type)}, pairs::Tuple, fmt::Pack.AbstractStructFormat)
+    function StructPack.construct(::Type{$(target.type)}, pairs::Tuple, fmt::StructPack.AbstractStructFormat)
       if length(pairs) != length($symbols) 
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
@@ -298,19 +298,19 @@ function code_fieldformats(target, fieldnames, formats)
     fieldnames = :(Base.fieldnames($(target.type)))
   end
   return quote
-    function Pack.fieldnames(::Type{$(target.type)}, ::Pack.AbstractStructFormat)
+    function StructPack.fieldnames(::Type{$(target.type)}, ::StructPack.AbstractStructFormat)
       return $fieldnames
     end
 
-    function Pack.fieldtypes(::Type{$(target.type)}, fmt::Pack.AbstractStructFormat)
-      names = Pack.fieldnames($(target.type), fmt)
+    function StructPack.fieldtypes(::Type{$(target.type)}, fmt::StructPack.AbstractStructFormat)
+      names = StructPack.fieldnames($(target.type), fmt)
       return map(key -> Base.fieldtype($(target.type), key), names)
     end
 
-    @generated function Pack.fieldformats(::Type{$(target.type)}, ::F) where {F <: Pack.AbstractStructFormat}
-      names = Pack.fieldnames($(target.type), F())
+    @generated function StructPack.fieldformats(::Type{$(target.type)}, ::F) where {F <: StructPack.AbstractStructFormat}
+      names = StructPack.fieldnames($(target.type), F())
       fexprs = map(names) do key
-        F = Base.get($formats, key, :(Pack.DefaultFormat))
+        F = Base.get($formats, key, :(StructPack.DefaultFormat))
         Expr(:call, F)
       end
       formats = Expr(:tuple, fexprs...)
@@ -371,15 +371,15 @@ end
     @pack T in F
     @pack {<: T} in F
 
-Convenience syntax for `Pack.format(::Type{T}) = F()` respectively
-`Pack.format(::Type{<: T}) = F()`.
+Convenience syntax for `StructPack.format(::Type{T}) = F()` respectively
+`StructPack.format(::Type{<: T}) = F()`.
 
 ---
 
     @pack R T in F
     @pack R {<: T} in F
 
-Convenience syntax for `Pack.format(::Type{T}, R()) = F()` respectively `Pack.format(::Type{<: T}) = F()`. 
+Convenience syntax for `StructPack.format(::Type{T}, R()) = F()` respectively `StructPack.format(::Type{<: T}) = F()`. 
 
 ---
 
@@ -418,7 +418,7 @@ several keys `a, b, ...` via the syntax `[(a, b, ...) in F]`.
 ## Examples
 
 ```julia
-using Pack
+using StructPack
 
 struct A
   a :: Int

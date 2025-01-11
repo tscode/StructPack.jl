@@ -1,12 +1,12 @@
 
-using Pack
+using StructPack
 using Test
 using Random
 
-function packcycle(value, T = typeof(value); isequal = isequal, fmt = Pack.DefaultFormat())
-  bytes = Pack.pack(value, fmt)
-  uvalue = Pack.unpack(bytes, T, fmt)
-  return isequal(value, uvalue) && all(bytes .== Pack.pack(uvalue, fmt))
+function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat())
+  bytes = pack(value, fmt)
+  uvalue = unpack(bytes, T, fmt)
+  return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt))
 end
 
 @testset "AnyFormat" begin
@@ -17,8 +17,8 @@ end
     false => "some text",
     nothing => -3,
   )
-  bytes = Pack.pack(val)
-  val2 = Pack.unpack(bytes)
+  bytes = pack(val)
+  val2 = unpack(bytes)
   @test all(keys(val)) do key
     val[key] == val2[key]
   end
@@ -79,18 +79,18 @@ end
 @testset "BinArrays" begin
   for F in [Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64]
     for data in [rand(F, 5), rand(F, 1000)]
-      for fmt in [Pack.VectorFormat(), Pack.BinVectorFormat(), Pack.ArrayFormat(), Pack.BinArrayFormat()]
+      for fmt in [VectorFormat(), BinVectorFormat(), ArrayFormat(), BinArrayFormat()]
         @test packcycle(data, fmt = fmt)
       end
     end
     for data in [rand(F, 5, 5), rand(F, 100, 100)]
-      for fmt in [Pack.ArrayFormat(), Pack.BinArrayFormat()]
+      for fmt in [ArrayFormat(), BinArrayFormat()]
         @test packcycle(data, fmt = fmt)
       end
     end
   end
   for data in [BitArray(undef, 5, 5), BitArray(undef, 100, 100)]
-    for fmt in [Pack.ArrayFormat(), Pack.BinArrayFormat()]
+    for fmt in [ArrayFormat(), BinArrayFormat()]
       @test packcycle(data, fmt = fmt)
     end
   end
@@ -106,13 +106,13 @@ end
 
   val = A(nothing, "test", (10, 10.), false)
 
-  for fmt in [Pack.MapFormat(), Pack.VectorFormat(), Pack.DynamicMapFormat(), Pack.DynamicVectorFormat(), Pack.StructFormat(), Pack.UnorderedStructFormat()]
+  for fmt in [MapFormat(), VectorFormat(), DynamicMapFormat(), DynamicVectorFormat(), StructFormat(), UnorderedStructFormat()]
     @test packcycle(val, fmt = fmt)
   end
 
-  @test_throws ErrorException Pack.pack(val)
+  @test_throws ErrorException pack(val)
 
-  Pack.format(::Type{A}) = Pack.StructFormat()
+  StructPack.format(::Type{A}) = StructFormat()
   @test packcycle(val)
 end
 
@@ -125,21 +125,21 @@ end
 
   val = B(5, 0., "test")
 
-  bytes = Pack.pack((a = 5, c = "test", b = 0.))
-  @test_throws Pack.UnpackError Pack.unpack(bytes, B, Pack.StructFormat())
-  @test val == Pack.unpack(bytes, B, Pack.UnorderedStructFormat())
+  bytes = pack((a = 5, c = "test", b = 0.))
+  @test_throws StructPack.UnpackError unpack(bytes, B, StructFormat())
+  @test val == unpack(bytes, B, UnorderedStructFormat())
 end
 
 @testset "TypedFormat" begin
   val = rand(Int64, 10)
-  @test packcycle(val, Array, fmt = Pack.TypedFormat())
+  @test packcycle(val, Array, fmt = TypedFormat())
   
   struct C
     a :: Tuple
     b :: AbstractString
   end
   val = C((2, "test", 1e18), "This is a test")
-  Pack.valueformat(::Type{C}, index, ::Pack.TypedFormat) = Pack.TypedFormat()
-  @test packcycle(val, fmt = Pack.VectorFormat())
-  @test packcycle(val, Any, fmt = Pack.TypedFormat{Pack.StructFormat}())
+  StructPack.valueformat(::Type{C}, index, ::TypedFormat) = TypedFormat()
+  @test packcycle(val, fmt = VectorFormat())
+  @test packcycle(val, Any, fmt = TypedFormat{StructFormat}())
 end

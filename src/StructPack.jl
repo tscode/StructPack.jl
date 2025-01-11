@@ -1,6 +1,6 @@
-module Pack
+module StructPack
 
-# Pack currently uses the scoped values Pack.scope and Pack.whitelist
+# Pack currently uses the scoped values StructPack.scope and StructPack.whitelist
 using Base.ScopedValues
 
 # Interface and abstract type definitions
@@ -45,9 +45,13 @@ export Format,
        BinArrayFormat,
        TypedFormat
 
+export pack, unpack
+
 public Rules
 
-public pack, unpack, construct, destruct, valuetype, valueformat, keytype, keyformat, fieldtypes, fieldnames, fieldformats
+public construct, destruct
+public valuetype, valueformat, keytype, keyformat
+public fieldtypes, fieldnames, fieldformats
        
 public whitelist, rules
 

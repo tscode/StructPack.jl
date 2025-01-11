@@ -32,7 +32,7 @@ This approach enables 'dynamic' unpacking where the type / format of an entry
 depends on the values unpacked previously. The format [`TypedFormat`](@ref)
 exploits this pattern.
 """
-iterstate(::Type, state::Int, entry, ::Format) = state + 1
+iterstate(::Type, state, entry, ::Format) = state + 1
 
 function iterstate(T::Type, state, entry, fmt::Format, ::Rules)
   return iterstate(T, state, entry, fmt)
