@@ -47,12 +47,12 @@ export Format,
 
 export pack, unpack
 
-public Rules
+# public Context
 
-public construct, destruct
-public valuetype, valueformat, keytype, keyformat
-public fieldtypes, fieldnames, fieldformats
+# public construct, destruct
+# public valuetype, valueformat, keytype, keyformat
+# public fieldtypes, fieldnames, fieldformats
        
-public whitelist, rules
+# public whitelist, context
 
-end # module Pack
+end # module StructPack

@@ -2,8 +2,8 @@
 """
 Convenience format to unpack generic msgpack values.
 
-Note that custom rules implemented via a [`Rules`](@ref) singleton are ignored
-by [`AnyFormat`](@ref).
+Note that custom contexts (see [`Context`](@ref)) are ignored by
+[`AnyFormat`](@ref).
 
 !!! note
 
@@ -45,9 +45,9 @@ end
 
 pack(io::IO, value, ::AnyFormat) = pack(io, value)
 
-function unpack(io::IO, ::AnyFormat, rules::Rules = FallbackRules())
+function unpack(io::IO, ::AnyFormat, ctx::Context = DefaultContext())
   fmt = peekformat(io)
-  # Non-default rules are ignored for AnyFormat
-  return unpack(io, fmt, FallbackRules())
+  # Non-default context is ignored by AnyFormat
+  return unpack(io, fmt, DefaultContext())
 end
 

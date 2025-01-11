@@ -1,13 +1,13 @@
 
 """
-    insert_rules!(ex, rex)
+    insert_context!(ex, rex)
 
 Add the trailing argument `::\$rex` to all toplevel function definitions in
 the expression `ex`.
 """
-inject_rules!(ex, ::Nothing) = nothing
+inject_context!(ex, ::Nothing) = nothing
 
-function inject_rules!(ex, rex)
+function inject_context!(ex, rex)
   if ex isa Expr
     if ex.head == :function
       if ex.args[1] isa Expr && ex.args[1].head == :where
@@ -17,7 +17,7 @@ function inject_rules!(ex, rex)
       end
       push!(arguments, Expr(:(::), rex))
     else
-      foreach(arg -> inject_rules!(arg, rex), ex.args)
+      foreach(arg -> inject_context!(arg, rex), ex.args)
     end
   end
   return
@@ -74,11 +74,11 @@ function is_type_expr(ex, curly = true)
 end
 
 """
-    parse_rules_expr(ex)
+    parse_context_expr(ex)
 
-Check if `ex` can be understood as rules expression and return it if it can.
+Check if `ex` can be understood as context expression and return it if it can.
 """
-function parse_rules_expr(ex)
+function parse_context_expr(ex)
   return is_type_expr(ex) ? ex : nothing
 end
 
@@ -320,12 +320,12 @@ function code_fieldformats(target, fieldnames, formats)
 end
 
 """
-    consume_rules_argument(args)
+    consume_context_argument(args)
 
-Try to consume an optional rules type argument for the [`@pack`](@ref) macro.
-Returns the consumed rule (if any) and the remaining arguments.
+Try to consume an optional context type argument for the [`@pack`](@ref) macro.
+Returns the consumed context (if any) and the remaining arguments.
 """
-function consume_rules_argument(args)
+function consume_context_argument(args)
   if is_type_expr(args[1])
     args[1], args[2:end]
   else
@@ -352,7 +352,7 @@ function consume_argument(f, args)
 end
 
 function parse_packmacro_arguments(args)
-  rules, args = consume_rules_argument(args)
+  ctx, args = consume_context_argument(args)
   @assert !isempty(args) "Format argument is missing in @pack macro."
   informat, args = consume_argument(parse_informat_expr, args)
   @assert !isnothing(informat) "Macro format expression cannot be parsed."
@@ -360,7 +360,7 @@ function parse_packmacro_arguments(args)
   formats, args = consume_argument(parse_fieldformats_expr, args)
   @assert isempty(args) "Invalid macro arguments: $args"
   return (;
-    rules,
+    ctx,
     informat,
     cons,
     formats,
@@ -376,20 +376,21 @@ Convenience syntax for `StructPack.format(::Type{T}) = F()` respectively
 
 ---
 
-    @pack R T in F
-    @pack R {<: T} in F
+    @pack C T in F
+    @pack C {<: T} in F
 
-Convenience syntax for `StructPack.format(::Type{T}, R()) = F()` respectively `StructPack.format(::Type{<: T}) = F()`. 
+Convenience syntax for `StructPack.format(::Type{T}, ::Type{C}) = F()`
+respectively `StructPack.format(::Type{<: T}, ::Type{C}) = F()`, where `C <:
+Context` is the type of a context singleton.
 
 ---
 
-    @pack R informat (constructor args...) [field formats...]
+    @pack C informat (constructor args...) [field formats...]
 
 Generic packing macro for struct formats.
 
-The first expression `R <: Rules` is optional.
-The definitions enacted by the macro will be restricted to the rules
-object `R()`.
+The first expression `C <: Context` is optional.
+The definitions enacted by the macro will be restricted to the context `C()`.
 
 The second expression `informat` can be an expression of the form `T in F` or
 `{<: T} in F` for a user specified type `T` and a given
@@ -465,7 +466,7 @@ macro pack(args...)
   end
   
   block = Expr(:block, statements...)
-  inject_rules!(block, r.rules)
+  inject_context!(block, r.ctx)
   inject_constraint!(block, target.constraint)
   return esc(block)
 end

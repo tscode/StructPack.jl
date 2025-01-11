@@ -31,14 +31,14 @@ function fieldformats(::Type{T}, fmt::AbstractStructFormat) where {T}
   return ntuple(_ -> DefaultFormat(), length(fieldnames(T, fmt)))
 end
 
-function pack(io::IO, value::T, fmt::AbstractStructFormat, rules::Rules) where {T}
-  pairs = destruct(value, fmt, rules)
+function pack(io::IO, value::T, fmt::AbstractStructFormat, ctx::Context) where {T}
+  pairs = destruct(value, fmt, ctx)
   writeheaderbytes(io, pairs, MapFormat())
   fmts = fieldformats(T, fmt)
   for (index, pair) in enumerate(pairs)
     fmt_val = fmts[index]
-    pack(io, first(pair), StringFormat(), rules)
-    pack(io, last(pair), fmt_val, rules)
+    pack(io, first(pair), StringFormat(), ctx)
+    pack(io, last(pair), fmt_val, ctx)
   end
   return
 end
@@ -100,7 +100,7 @@ the keys encountered during unpacking are consistent with `T`.
 """
 struct StructFormat <: AbstractStructFormat end
 
-function unpack(io::IO, ::Type{T}, fmt::StructFormat, rules::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::StructFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, MapFormat())
   names = fieldnames(T, fmt)
   fmts = fieldformats(T, fmt)
@@ -109,14 +109,14 @@ function unpack(io::IO, ::Type{T}, fmt::StructFormat, rules::Rules)::T where {T}
   Unexpected number of fields encountered.
   """
   pairs = map(names, fmts, types) do name, fmt_val, type_val
-    key = unpack(io, Symbol, StringFormat(), rules)
+    key = unpack(io, Symbol, StringFormat(), ctx)
     if key != name 
       unpackerror("Encountered unexpected key :$key. Expected :$name.")
     end
-    value = unpack(io, type_val, fmt_val, rules)
+    value = unpack(io, type_val, fmt_val, ctx)
     return key=>value
   end
-  return construct(T, pairs, fmt, rules)
+  return construct(T, pairs, fmt, ctx)
 end
 
 """
@@ -137,7 +137,7 @@ unpacked from the msgpack map. To use a keyword-argument based constructor, simp
 """
 struct UnorderedStructFormat <: AbstractStructFormat end
 
-function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, rules ::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, MapFormat())
   names = fieldnames(T, fmt)
   fmts = fieldformats(T, fmt)
@@ -154,7 +154,7 @@ function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, rules ::Rules)::T
     end
     fmt_val = fmts[index]
     type_val = types[index]
-    value = unpack(io, type_val, fmt_val, rules)
+    value = unpack(io, type_val, fmt_val, ctx)
     if isassigned(pairs, index)
       unpackerror("""
       Duplicated key :$key. This is not supported by UnorderedStructFormat.
@@ -162,5 +162,5 @@ function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, rules ::Rules)::T
     end
     pairs[index] = (key=>value)
   end
-  return construct(T, pairs, fmt, rules)
+  return construct(T, pairs, fmt, ctx)
 end

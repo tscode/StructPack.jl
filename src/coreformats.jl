@@ -51,12 +51,12 @@ function isformatbyte(byte, ::NilFormat)
   return byte == 0xc0
 end
 
-function pack(io::IO, value, ::NilFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::NilFormat, ::Context)::Nothing
   write(io, 0xc0)
   return nothing
 end
 
-function unpack(io::IO, ::NilFormat, ::Rules)::Nothing
+function unpack(io::IO, ::NilFormat, ::Context)::Nothing
   byte = read(io, UInt8)
   if byte == 0xc0
     nothing
@@ -103,7 +103,7 @@ function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
 end
 
-function pack(io::IO, value, ::BoolFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::BoolFormat, ::Context)::Nothing
   if destruct(value, BoolFormat())
     write(io, 0xc3)
   else
@@ -112,7 +112,7 @@ function pack(io::IO, value, ::BoolFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BoolFormat, ::Rules)::Bool
+function unpack(io::IO, ::BoolFormat, ::Context)::Bool
   byte = read(io, UInt8)
   if byte == 0xc3
     true
@@ -162,7 +162,7 @@ function isformatbyte(byte, ::SignedFormat)
          0xd0 <= byte <= 0xd3 # signed 8 to 64
 end
 
-function pack(io::IO, value, ::SignedFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::SignedFormat, ::Context)::Nothing
   x = destruct(value, SignedFormat())
   if -32 <= x < 0 # negative fixint
     write(io, reinterpret(UInt8, Int8(x)))
@@ -186,7 +186,7 @@ function pack(io::IO, value, ::SignedFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::SignedFormat, ::Rules)::Int64
+function unpack(io::IO, ::SignedFormat, ::Context)::Int64
   byte = read(io, UInt8)
   if byte >= 0xe0 # negative fixint
     reinterpret(Int8, byte)
@@ -254,7 +254,7 @@ function isformatbyte(byte, ::UnsignedFormat)
          0xcc <= byte <= 0xcf # unsigned 8 to 64
 end
 
-function pack(io::IO, value, ::UnsignedFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::UnsignedFormat, ::Context)::Nothing
   x = destruct(value, UnsignedFormat())
   if x < 128 # positive fixint
     write(io, UInt8(x))
@@ -276,7 +276,7 @@ function pack(io::IO, value, ::UnsignedFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::UnsignedFormat, ::Rules)::UInt64
+function unpack(io::IO, ::UnsignedFormat, ::Context)::UInt64
   byte = read(io, UInt8)
   if byte < 128 # positive fixint
     byte
@@ -332,7 +332,7 @@ function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
 end
 
-function pack(io::IO, value, ::FloatFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::FloatFormat, ::Context)::Nothing
   val = destruct(value, FloatFormat())
   if isa(val, Float16) || isa(val, Float32) # float 32
     write(io, 0xca)
@@ -344,7 +344,7 @@ function pack(io::IO, value, ::FloatFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::FloatFormat, ::Rules)::Float64
+function unpack(io::IO, ::FloatFormat, ::Context)::Float64
   byte = read(io, UInt8)
   if byte == 0xca ## float 32
     read(io, Float32) |> ntoh
@@ -398,7 +398,7 @@ function isformatbyte(byte, ::StringFormat)
          0xd9 <= byte <= 0xdb # str 8 to 32
 end
 
-function pack(io::IO, value, ::StringFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::StringFormat, ::Context)::Nothing
   str = destruct(value, StringFormat())
   n = sizeof(str)
   if n < 32 # fixstr format
@@ -419,7 +419,7 @@ function pack(io::IO, value, ::StringFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::StringFormat, ::Rules)::String
+function unpack(io::IO, ::StringFormat, ::Context)::String
   byte = read(io, UInt8)
   n = if 0xa0 <= byte <= 0xbf # fixstr  format
     byte & 0x1f
@@ -478,7 +478,7 @@ function isformatbyte(byte, ::BinaryFormat)
   return 0xc4 <= byte <= 0xc6
 end
 
-function pack(io::IO, value, ::BinaryFormat, ::Rules)::Nothing
+function pack(io::IO, value, ::BinaryFormat, ::Context)::Nothing
   bin = destruct(value, BinaryFormat())
   n = sizeof(bin)
   if n <= typemax(UInt8) # bin8
@@ -497,7 +497,7 @@ function pack(io::IO, value, ::BinaryFormat, ::Rules)::Nothing
   return nothing
 end
 
-function unpack(io::IO, ::BinaryFormat, ::Rules)::Vector{UInt8}
+function unpack(io::IO, ::BinaryFormat, ::Context)::Vector{UInt8}
   byte = read(io, UInt8)
   n = if byte == 0xc4 # bin8
     read(io, UInt8)
@@ -593,32 +593,32 @@ function readheaderbytes(io::IO, fmt::VectorFormat)::Int
   end
 end
 
-function pack(io::IO, value::T, fmt::VectorFormat, rules::Rules) where {T}
-  val = destruct(value, fmt, rules)
+function pack(io::IO, value::T, fmt::VectorFormat, ctx::Context) where {T}
+  val = destruct(value, fmt, ctx)
   writeheaderbytes(io, val, fmt)
   for (state, entry) in enumerate(val)
-    fmt_val = valueformat(T, state, fmt, rules)
-    pack(io, entry, fmt_val, rules)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    pack(io, entry, fmt_val, ctx)
   end
   return nothing
 end
 
-function unpack(io::IO, ::Type{T}, fmt::VectorFormat, rules::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::VectorFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, fmt)
   entries = Iterators.map(1:n) do state
-    S = valuetype(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    entry = unpack(io, S, fmt_val, rules)
+    S = valuetype(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    entry = unpack(io, S, fmt_val, ctx)
     return entry
   end
-  return construct(T, Generator{T}(entries), fmt, rules)
+  return construct(T, Generator{T}(entries), fmt, ctx)
 end
 
 # Support for generic unpacking / AnyFormat
-function unpack(io::IO, ::VectorFormat, rules::Rules)::Vector
+function unpack(io::IO, ::VectorFormat, ctx::Context)::Vector
   n = readheaderbytes(io, VectorFormat())
   values = map(1:n) do _
-    return unpack(io, AnyFormat(), rules)
+    return unpack(io, AnyFormat(), ctx)
   end
   return values
 end
@@ -708,38 +708,38 @@ function readheaderbytes(io::IO, fmt::MapFormat)::Int
   end
 end
 
-function pack(io::IO, value::T, fmt::MapFormat, rules::Rules) where {T}
-  pairs = destruct(value, fmt, rules)
+function pack(io::IO, value::T, fmt::MapFormat, ctx::Context) where {T}
+  pairs = destruct(value, fmt, ctx)
   writeheaderbytes(io, pairs, fmt)
   for (state, pair) in enumerate(pairs)
-    fmt_key = keyformat(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    pack(io, first(pair), fmt_key, rules)
-    pack(io, last(pair), fmt_val, rules)
+    fmt_key = keyformat(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    pack(io, first(pair), fmt_key, ctx)
+    pack(io, last(pair), fmt_val, ctx)
   end
   return
 end
 
-function unpack(io::IO, ::Type{T}, fmt::MapFormat, rules::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::MapFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, fmt)
   pairs = Iterators.map(1:n) do state
-    K = keytype(T, state, fmt, rules)
-    V = valuetype(T, state, fmt, rules)
-    fmt_key = keyformat(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    key = unpack(io, K, fmt_key, rules)
-    value = unpack(io, V, fmt_val, rules)
+    K = keytype(T, state, fmt, ctx)
+    V = valuetype(T, state, fmt, ctx)
+    fmt_key = keyformat(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    key = unpack(io, K, fmt_key, ctx)
+    value = unpack(io, V, fmt_val, ctx)
     return key=>value
   end
-  return construct(T, Generator{T}(pairs), fmt, rules)
+  return construct(T, Generator{T}(pairs), fmt, ctx)
 end
 
 # Support for generic unpacking / AnyFormat
-function unpack(io::IO, ::MapFormat, rules::Rules)::Dict
+function unpack(io::IO, ::MapFormat, ctx::Context)::Dict
   n = readheaderbytes(io, MapFormat())
   pairs = Iterators.map(1:n) do _
-    key = unpack(io, AnyFormat(), rules)
-    value = unpack(io, AnyFormat(), rules)
+    key = unpack(io, AnyFormat(), ctx)
+    value = unpack(io, AnyFormat(), ctx)
     return (key, value)
   end
   return Dict(pairs)

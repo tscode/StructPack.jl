@@ -26,23 +26,23 @@ function Base.IteratorSize(::Type{<: Generator{T, I}}) where {T, I}
   return Base.IteratorSize(I)
 end
 
-function keytype(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
-  return keytype(T, state, fmt, rules)
+function keytype(::Type{Generator{T}}, state, fmt::Format, ctx::Context) where {T}
+  return keytype(T, state, fmt, ctx)
 end
 
-function keyformat(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
-  return keyformat(T, state, fmt, rules)
+function keyformat(::Type{Generator{T}}, state, fmt::Format, ctx::Context) where {T}
+  return keyformat(T, state, fmt, ctx)
 end
 
-function valuetype(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
-  return valuetype(T, state, fmt, rules)
+function valuetype(::Type{Generator{T}}, state, fmt::Format, ctx::Context) where {T}
+  return valuetype(T, state, fmt, ctx)
 end
 
-function valueformat(::Type{Generator{T}}, state, fmt::Format, rules::Rules) where {T}
-  return valueformat(T, state, fmt, rules)
+function valueformat(::Type{Generator{T}}, state, fmt::Format, ctx::Context) where {T}
+  return valueformat(T, state, fmt, ctx)
 end
 
-function construct(::Type{Generator{T}}, val::Generator{Generator{T}}, ::Format, ::Rules) where {T}
+function construct(::Type{Generator{T}}, val::Generator{Generator{T}}, ::Format, ::Context) where {T}
   return Generator{T}(val.iter)
 end
 

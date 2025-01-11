@@ -28,7 +28,7 @@ const whitelist = ScopedValue{Union{Whitelist, Vector{Type}}}(
 )
 
 """
-    typeparamtype(T::Type, index , ::Format[, ::Rules])
+    typeparamtype(T::Type, index , ::Format[, ::Context])
 
 Return the type of the `index`-th type parameter of `T`.
 
@@ -40,12 +40,12 @@ parameters of `T`.
 """
 typeparamtype(T::Type, index, ::Format) = Any
 
-function typeparamtype(T::Type, index, fmt::Format, ::Rules)
+function typeparamtype(T::Type, index, fmt::Format, ::Context)
   return typeparamtype(T, index, fmt)
 end
 
 """
-    typeparamformat(T::Type, index, fmt::Format [, rules::Rules])
+    typeparamformat(T::Type, index, fmt::Format [, ctx::Context])
 
 Return the type param format of the `index`-th type parameter of `T`
 
@@ -55,11 +55,11 @@ This method is consulted when packing / unpacking types via [`TypeFormat`](@ref)
 and [`TypedFormat`]. It can be used to insert information about the type
 parameters of `T`.
 
-This method is called by `valueformat(TypeParams{T}, fmt, index, rules)`.
+This method is called by `valueformat(TypeParams{T}, fmt, index, ctx)`.
 """
 typeparamformat(::Type, index, ::Format) = TypedFormat()
 
-function typeparamformat(T::Type, index, fmt::Format, ::Rules)
+function typeparamformat(T::Type, index, fmt::Format, ::Context)
   return typeparamformat(T, index, fmt)
 end
 
@@ -73,12 +73,12 @@ end
 
 format(::Type{<:TypeParams}) = VectorFormat()
 
-function valuetype(::Type{TypeParams{T}}, index, fmt::Format, rules::Rules) where {T}
-  return typeparamtype(T, index, fmt, rules)
+function valuetype(::Type{TypeParams{T}}, index, fmt::Format, ctx::Context) where {T}
+  return typeparamtype(T, index, fmt, ctx)
 end
 
-function valueformat(::Type{TypeParams{T}}, index, fmt::Format, rules::Rules) where {T}
-  return typeparamformat(T, index, fmt, rules)
+function valueformat(::Type{TypeParams{T}}, index, fmt::Format, ctx::Context) where {T}
+  return typeparamformat(T, index, fmt, ctx)
 end
 
 destruct(t::TypeParams, ::VectorFormat) = t.params
@@ -162,12 +162,12 @@ sure that `t = TypeValue(T)` and `composetype(t)` work as intended.
 """
 struct TypeFormat <: Format end
 
-function pack(io::IO, value, ::TypeFormat, rules::Rules)
-  pack(io, TypeValue(value), DynamicMapFormat(), rules)
+function pack(io::IO, value, ::TypeFormat, ctx::Context)
+  pack(io, TypeValue(value), DynamicMapFormat(), ctx)
 end
 
-function unpack(io::IO, ::TypeFormat, rules::Rules)
-  t = unpack(io, TypeValue, DynamicMapFormat(), rules)
+function unpack(io::IO, ::TypeFormat, ctx::Context)
+  t = unpack(io, TypeValue, DynamicMapFormat(), ctx)
   return composetype(t)
 end
 
@@ -259,19 +259,19 @@ struct TypedFormat{F <: Format} <: Format end
 
 TypedFormat() = TypedFormat{DefaultFormat}()
 
-function pack(io::IO, value, ::TypedFormat{F}, rules::Rules) where {F <: Format}
-  pack(io, TypedValue{F}(value), DynamicMapFormat(), rules)
+function pack(io::IO, value, ::TypedFormat{F}, ctx::Context) where {F <: Format}
+  pack(io, TypedValue{F}(value), DynamicMapFormat(), ctx)
 end
 
-function unpack(io::IO, T::Type, ::TypedFormat{F}, rules::Rules) where {F <: Format}
-  tval = unpack(io, TypedValue{T, F}, DynamicMapFormat(), rules)
+function unpack(io::IO, T::Type, ::TypedFormat{F}, ctx::Context) where {F <: Format}
+  tval = unpack(io, TypedValue{T, F}, DynamicMapFormat(), ctx)
   @assert tval.value isa T """
   Expected value type $T when unpacking typed value. Found $(typeof(tval.value)).
   """
   return tval.value
 end
 
-function unpack(io::IO, fmt::TypedFormat, rules::Rules = StructPack.rules[])
-  return unpack(io, Any, fmt, rules)
+function unpack(io::IO, fmt::TypedFormat, ctx::Context = context[])
+  return unpack(io, Any, fmt, ctx)
 end
 

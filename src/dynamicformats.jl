@@ -1,6 +1,6 @@
 
 """
-    iterstate(T::Type, fmt::Format [, rules::Rules])
+    iterstate(T::Type, fmt::Format [, ctx::Context])
     
 Initialize a state object that is repeatedly updated while iterating over the
 entries of values of type `T` when packing and unpacking in format `fmt`.
@@ -14,17 +14,17 @@ methods [`keytype`](@ref), [`keyformat`](@ref), [`valuetype`](@ref), or
 [`DynamicMapFormat`](@ref).
 """
 iterstate(T::Type, ::Format) = 1 
-iterstate(T::Type, fmt::Format, ::Rules) = iterstate(T, fmt)
+iterstate(T::Type, fmt::Format, ::Context) = iterstate(T, fmt)
 
 """
-    iterstate(T::Type, state, entry, fmt::Format [, rules::Rules])
+    iterstate(T::Type, state, entry, fmt::Format [, ctx::Context])
 
 Return an update of the state object `state` when `T` is packed or unpacked in
 the format `fmt`.
 
 The argument `entry` signifies the entry packed / unpacked in the last
 iteration and can be used to inform the next iteration state. It will be of
-type `valuetype(T, fmt, state, rules)` in case of [`DynamicVectorFormat`](@ref) and
+type `valuetype(T, fmt, state, ctx)` in case of [`DynamicVectorFormat`](@ref) and
 similarly a key-value pair with types determined by [`keytype`](@ref) and
 [`valuetype`](@ref) in case of [`DynamicMapFormat`](@ref).
 
@@ -34,7 +34,7 @@ exploits this pattern.
 """
 iterstate(::Type, state, entry, ::Format) = state + 1
 
-function iterstate(T::Type, state, entry, fmt::Format, ::Rules)
+function iterstate(T::Type, state, entry, fmt::Format, ::Context)
   return iterstate(T, state, entry, fmt)
 end
 
@@ -56,29 +56,29 @@ past entries via overloading [`iterstate`](@ref).
 """
 struct DynamicVectorFormat <: AbstractVectorFormat end
 
-function pack(io::IO, value::T, fmt::DynamicVectorFormat, rules::Rules) where {T}
-  val = destruct(value, fmt, rules)
+function pack(io::IO, value::T, fmt::DynamicVectorFormat, ctx::Context) where {T}
+  val = destruct(value, fmt, ctx)
   writeheaderbytes(io, val, VectorFormat())
-  state = iterstate(T, fmt, rules)
+  state = iterstate(T, fmt, ctx)
   for entry in val
-    fmt_val = valueformat(T, state, fmt, rules)
-    pack(io, entry, fmt_val, rules)
-    state = iterstate(T, state, entry, fmt, rules)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    pack(io, entry, fmt_val, ctx)
+    state = iterstate(T, state, entry, fmt, ctx)
   end
   return nothing
 end
 
-function unpack(io::IO, ::Type{T}, fmt::DynamicVectorFormat, rules::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::DynamicVectorFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, VectorFormat())
-  state = iterstate(T, fmt, rules)
+  state = iterstate(T, fmt, ctx)
   entries = Iterators.map(1:n) do _
-    S = valuetype(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    entry = unpack(io, S, fmt_val, rules)
-    state = iterstate(T, state, entry, fmt, rules)
+    S = valuetype(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    entry = unpack(io, S, fmt_val, ctx)
+    state = iterstate(T, state, entry, fmt, ctx)
     return entry
   end
-  return construct(T, Generator{T}(entries), fmt, rules)
+  return construct(T, Generator{T}(entries), fmt, ctx)
 end
 
 """
@@ -100,33 +100,33 @@ struct DynamicMapFormat <: AbstractMapFormat end
 
 const AnyMapFormat = Union{MapFormat, DynamicMapFormat}
 
-function pack(io::IO, value::T, fmt::DynamicMapFormat, rules::Rules) where {T}
-  val = destruct(value, fmt, rules)
+function pack(io::IO, value::T, fmt::DynamicMapFormat, ctx::Context) where {T}
+  val = destruct(value, fmt, ctx)
   writeheaderbytes(io, val, MapFormat())
-  state = iterstate(T, fmt, rules)
+  state = iterstate(T, fmt, ctx)
   for entry in val
-    fmt_key = keyformat(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    pack(io, first(entry), fmt_key, rules)
-    pack(io, last(entry), fmt_val, rules)
-    state = iterstate(T, state, entry, fmt, rules)
+    fmt_key = keyformat(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    pack(io, first(entry), fmt_key, ctx)
+    pack(io, last(entry), fmt_val, ctx)
+    state = iterstate(T, state, entry, fmt, ctx)
   end
   return nothing
 end
 
-function unpack(io::IO, ::Type{T}, fmt::DynamicMapFormat, rules::Rules)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::DynamicMapFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, MapFormat())
-  state = iterstate(T, fmt, rules)
+  state = iterstate(T, fmt, ctx)
   pairs = Iterators.map(1:n) do _
-    K = keytype(T, state, fmt, rules)
-    V = valuetype(T, state, fmt, rules)
-    fmt_key = keyformat(T, state, fmt, rules)
-    fmt_val = valueformat(T, state, fmt, rules)
-    key = unpack(io, K, fmt_key, rules)
-    value = unpack(io, V, fmt_val, rules)
+    K = keytype(T, state, fmt, ctx)
+    V = valuetype(T, state, fmt, ctx)
+    fmt_key = keyformat(T, state, fmt, ctx)
+    fmt_val = valueformat(T, state, fmt, ctx)
+    key = unpack(io, K, fmt_key, ctx)
+    value = unpack(io, V, fmt_val, ctx)
     entry = key=>value
-    state = iterstate(T, state, entry, fmt, rules)
+    state = iterstate(T, state, entry, fmt, ctx)
     return entry
   end
-  return construct(T, Generator{T}(pairs), fmt, rules)
+  return construct(T, Generator{T}(pairs), fmt, ctx)
 end

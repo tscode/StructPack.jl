@@ -52,15 +52,15 @@ function valueformat(::Type{<:ArrayValue}, state, ::MapFormat)
   return state == 3 ? VectorFormat() : DefaultFormat()
 end
 
-function pack(io::IO, value, ::ArrayFormat, rules::Rules)::Nothing
-  val = destruct(value, ArrayFormat(), rules)
+function pack(io::IO, value, ::ArrayFormat, ctx::Context)::Nothing
+  val = destruct(value, ArrayFormat(), ctx)
   datatype = Base.eltype(val) |> string |> Symbol
-  return pack(io, ArrayValue(datatype, size(val), val), rules)
+  return pack(io, ArrayValue(datatype, size(val), val), ctx)
 end
 
-function unpack(io::IO, ::Type{T}, ::ArrayFormat, rules::Rules)::T where {T}
-  val = unpack(io, ArrayValue{Generator{T}}, rules)
-  return construct(T, val, ArrayFormat(), rules)
+function unpack(io::IO, ::Type{T}, ::ArrayFormat, ctx::Context)::T where {T}
+  val = unpack(io, ArrayValue{Generator{T}}, ctx)
+  return construct(T, val, ArrayFormat(), ctx)
 end
 
 """
@@ -96,14 +96,14 @@ or make sure that the constructor `T(bytes::Vector{UInt8})` is defined.
 """
 struct BinVectorFormat <: Format end
 
-function pack(io::IO, value, ::BinVectorFormat, rules::Rules)::Nothing
-  val = destruct(value, BinVectorFormat(), rules)
-  return pack(io, val, BinaryFormat(), rules)
+function pack(io::IO, value, ::BinVectorFormat, ctx::Context)::Nothing
+  val = destruct(value, BinVectorFormat(), ctx)
+  return pack(io, val, BinaryFormat(), ctx)
 end
 
-function unpack(io::IO, ::Type{T}, ::BinVectorFormat, rules::Rules)::T where {T}
-  bytes = unpack(io, BinaryFormat(), rules)
-  return construct(T, bytes, BinVectorFormat(), rules)
+function unpack(io::IO, ::Type{T}, ::BinVectorFormat, ctx::Context)::T where {T}
+  bytes = unpack(io, BinaryFormat(), ctx)
+  return construct(T, bytes, BinVectorFormat(), ctx)
 end
 
 """
@@ -159,15 +159,15 @@ function valueformat(::Type{<:BinArrayValue}, state, ::MapFormat)
   return state == 3 ? BinaryFormat() : DefaultFormat()
 end
 
-function pack(io::IO, value, ::BinArrayFormat, rules::Rules)
-  val = destruct(value, BinArrayFormat(), rules)
+function pack(io::IO, value, ::BinArrayFormat, ctx::Context)
+  val = destruct(value, BinArrayFormat(), ctx)
   datatype = Base.eltype(val) |> string |> Symbol
-  pack(io, BinArrayValue(datatype, size(val), val), rules)
+  pack(io, BinArrayValue(datatype, size(val), val), ctx)
   return
 end
 
-function unpack(io::IO, ::Type{T}, ::BinArrayFormat, rules::Rules)::T where {T}
-  val = unpack(io, BinArrayValue{Vector{UInt8}}, rules)
-  return construct(T, val, BinArrayFormat(), rules)
+function unpack(io::IO, ::Type{T}, ::BinArrayFormat, ctx::Context)::T where {T}
+  val = unpack(io, BinArrayValue{Vector{UInt8}}, ctx)
+  return construct(T, val, BinArrayFormat(), ctx)
 end
 
