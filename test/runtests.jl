@@ -2,11 +2,34 @@
 using StructPack
 using Test
 using Random
+using Base.ScopedValues
 
-function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat())
-  bytes = pack(value, fmt)
-  uvalue = unpack(bytes, T, fmt)
-  return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt))
+function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat(), ctx = StructPack.DefaultContext())
+  with(StructPack.context => ctx) do
+    bytes = pack(value, fmt)
+    uvalue = unpack(bytes, T, fmt)
+    return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt))
+  end
+end
+
+struct A
+  a :: Nothing
+  b :: String
+  c :: Tuple{Int64, Float64}
+  d :: Bool
+end
+
+A(c, d; b) = A(nothing, b, c, d)
+
+struct B
+  a :: Int
+  b :: Float64
+  c :: String
+end
+
+struct C
+  a :: Tuple
+  b :: AbstractString
 end
 
 @testset "AnyFormat" begin
@@ -97,13 +120,6 @@ end
 end
 
 @testset "Structs" begin
-  struct A
-    a :: Nothing
-    b :: String
-    c :: Tuple{Int64, Float64}
-    d :: Bool
-  end
-
   val = A(nothing, "test", (10, 10.), false)
 
   for fmt in [MapFormat(), VectorFormat(), DynamicMapFormat(), DynamicVectorFormat(), StructFormat(), UnorderedStructFormat()]
@@ -117,12 +133,6 @@ end
 end
 
 @testset "StructFormats" begin
-  struct B
-    a :: Int
-    b :: Float64
-    c :: String
-  end
-
   val = B(5, 0., "test")
 
   bytes = pack((a = 5, c = "test", b = 0.))
@@ -133,13 +143,34 @@ end
 @testset "TypedFormat" begin
   val = rand(Int64, 10)
   @test packcycle(val, Array, fmt = TypedFormat())
-  
-  struct C
-    a :: Tuple
-    b :: AbstractString
-  end
   val = C((2, "test", 1e18), "This is a test")
   StructPack.valueformat(::Type{C}, index, ::TypedFormat) = TypedFormat()
   @test packcycle(val, fmt = VectorFormat())
   @test packcycle(val, Any, fmt = TypedFormat{StructFormat}())
 end
+
+@testset "Context" begin
+  struct C1 <: StructPack.Context end
+  StructPack.format(::Type{A}, ::C1) = VectorFormat()
+
+  val = A(nothing, "test", (10, 10.), false)
+
+  @test packcycle(val)
+  @test packcycle(val, ctx = C1())
+  @test length(pack(val, C1())) < length(pack(val))
+end
+
+@testset "Macro" begin
+  struct C2 <: StructPack.Context end
+  val = A(nothing, "test", (10, 10.), false)
+
+  @test StructPack.fieldformats(A, C2()) == (DefaultFormat(), DefaultFormat(), DefaultFormat(), DefaultFormat())
+
+  StructPack.@pack C2 A in UnorderedStructFormat A(c, d; b) [b in StringFormat]
+
+  @test StructPack.format(A, C2()) == UnorderedStructFormat()
+  @test StructPack.fieldformats(A, C2()) == (DefaultFormat(), DefaultFormat(), StringFormat())
+  @test packcycle(val, ctx = C2())
+end
+
+

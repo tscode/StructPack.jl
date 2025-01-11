@@ -5,36 +5,39 @@ Umbrella type for [`StructFormat`](@ref) and [`UnorderedStructFormat`](@ref).
 abstract type AbstractStructFormat <: AbstractMapFormat end
 
 """
-    fieldnames(T::Type, ::AbstractStructFormat)
+    fieldnames(T::Type [, ctx::Context])
 
-Return the field names of `T` when packing / unpacking in a struct format.
+Return the field names of `T` when packing / unpacking in [`AbstractStructFormat`](@ref) under `ctx`.
 
 Defaults to `Base.fieldnames(T)`.
 """
-fieldnames(T::Type, ::AbstractStructFormat) = Base.fieldnames(T)
+fieldnames(T::Type) = Base.fieldnames(T)
+fieldnames(T::Type, ::Context) = fieldnames(T)
 
 """
-    fieldtypes(T::Type, ::AbstractStructFormat)
+    fieldtypes(T::Type [, ctx::Context])
 
-Return the field types of `T` when packing / unpacking in a struct format.
+Return the field types of `T` when packing / unpacking in [`AbstractStructFormat`](@ref) under `ctx`.
 
 Defaults to `Base.fieldtypes(T)`.
 """
-fieldtypes(T::Type, ::AbstractStructFormat) = Base.fieldtypes(T)
+fieldtypes(T::Type) = Base.fieldtypes(T)
+fieldtypes(T::Type, ::Context) = fieldtypes(T)
 
 """
-    fieldformats(T::Type, ::AbstractStructFormat)
+    fieldformats(T::Type [, ctx::Context])
 
-Return the field types of `T` when packing / unpacking in a struct format.
+Return the field types of `T` when packing / unpacking in [`AbstractStructFormat`](ref) under `ctx`.
 """
-function fieldformats(::Type{T}, fmt::AbstractStructFormat) where {T}
-  return ntuple(_ -> DefaultFormat(), length(fieldnames(T, fmt)))
+function fieldformats(::Type{T}) where {T}
+  return ntuple(_ -> DefaultFormat(), length(fieldnames(T)))
 end
+fieldformats(T::Type, ::Context) = fieldformats(T)
 
 function pack(io::IO, value::T, fmt::AbstractStructFormat, ctx::Context) where {T}
   pairs = destruct(value, fmt, ctx)
   writeheaderbytes(io, pairs, MapFormat())
-  fmts = fieldformats(T, fmt)
+  fmts = fieldformats(T, ctx)
   for (index, pair) in enumerate(pairs)
     fmt_val = fmts[index]
     pack(io, first(pair), StringFormat(), ctx)
@@ -102,9 +105,9 @@ struct StructFormat <: AbstractStructFormat end
 
 function unpack(io::IO, ::Type{T}, fmt::StructFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, MapFormat())
-  names = fieldnames(T, fmt)
-  fmts = fieldformats(T, fmt)
-  types = fieldtypes(T, fmt)
+  names = fieldnames(T, ctx)
+  fmts = fieldformats(T, ctx)
+  types = fieldtypes(T, ctx)
   @assert n == length(fmts) == length(types) """
   Unexpected number of fields encountered.
   """
@@ -139,9 +142,9 @@ struct UnorderedStructFormat <: AbstractStructFormat end
 
 function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, ctx::Context)::T where {T}
   n = readheaderbytes(io, MapFormat())
-  names = fieldnames(T, fmt)
-  fmts = fieldformats(T, fmt)
-  types = fieldtypes(T, fmt)
+  names = fieldnames(T, ctx)
+  fmts = fieldformats(T, ctx)
+  types = fieldtypes(T, ctx)
   @assert n == length(fmts) == length(types) """
   Unexpected number of fields encountered.
   """

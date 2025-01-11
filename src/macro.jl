@@ -298,17 +298,17 @@ function code_fieldformats(target, fieldnames, formats)
     fieldnames = :(Base.fieldnames($(target.type)))
   end
   return quote
-    function StructPack.fieldnames(::Type{$(target.type)}, ::StructPack.AbstractStructFormat)
+    function StructPack.fieldnames(::Type{$(target.type)})
       return $fieldnames
     end
 
-    function StructPack.fieldtypes(::Type{$(target.type)}, fmt::StructPack.AbstractStructFormat)
-      names = StructPack.fieldnames($(target.type), fmt)
+    function StructPack.fieldtypes(::Type{$(target.type)})
+      names = $fieldnames
       return map(key -> Base.fieldtype($(target.type), key), names)
     end
 
-    @generated function StructPack.fieldformats(::Type{$(target.type)}, ::F) where {F <: StructPack.AbstractStructFormat}
-      names = StructPack.fieldnames($(target.type), F())
+    @generated function StructPack.fieldformats(::Type{$(target.type)})
+      names = $fieldnames
       fexprs = map(names) do key
         F = Base.get($formats, key, :(StructPack.DefaultFormat))
         Expr(:call, F)
@@ -379,8 +379,8 @@ Convenience syntax for `StructPack.format(::Type{T}) = F()` respectively
     @pack C T in F
     @pack C {<: T} in F
 
-Convenience syntax for `StructPack.format(::Type{T}, ::Type{C}) = F()`
-respectively `StructPack.format(::Type{<: T}, ::Type{C}) = F()`, where `C <:
+Convenience syntax for `StructPack.format(::Type{T}, ::C) = F()`
+respectively `StructPack.format(::Type{<: T}, ::C) = F()`, where `C <:
 Context` is the type of a context singleton.
 
 ---
