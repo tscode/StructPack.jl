@@ -1,16 +1,17 @@
 
-# Make Pack accessible
+# Make StructPack accessible
 push!(LOAD_PATH, "../src/")
 
-using Documenter, Pack
+using Documenter, StructPack
 
 makedocs(
-  sitename="Pack.jl Documentation",
+  sitename="StructPack.jl Documentation",
   pages = [
       "Overview" => "index.md",
       "Usage" => "usage.md",
       "Formats" => "formats.md",
-      "Scopes" => "scopes.md",
+      "Context" => "context.md",
+      "The @pack macro" => "macro.md",
       "API Reference" => "reference.md",
   ]
 )

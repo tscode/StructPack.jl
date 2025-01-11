@@ -1,171 +1,336 @@
 
+```@meta
+CurrentModule = StructPack
+```
+
 # Usage
 
-The functionality of `Pack.jl` revolves around the three functions [`pack`](@ref),
-[`unpack`](@ref), and [`format`](@ref). The latter decides how a julia value should be converted
-to a binary representation during calls of the former two.
+In order to serialize or deserialize a value of type `T` via StructPack.jl, a format must be specified. A format is a singleton subtype of [`Format`](@ref).
+This can either happen by explicitly providing it when calling [`pack`](@ref) and [`unpack`](@ref), or by setting a default format via overloading [`format`](@ref). Different formats might have different requirements for `T`.
 
-Formats are realized as singleton subtypes of `Pack.Format`. Core formats, that
-correspond more or less directly to underlying msgpack formats, are `NilFormat`,
-`BoolFormat`, `SignedFormat`, `UnsignedFormat`, `FloatFormat`, `VectorFormat`,
-`MapFormat`, and `BinaryFormat`.
-
-Convenience formats built on top of these are `ArrayFormat`, `BinVectorFormat`,
-`BinArrayFormat`, as well as `TypedFormat`. The corresponding docstrings provide
-additional information.
-
-Many base types in julia have a default format associated to them and can be
-packed / unpacked without further instructions.
+A number of basic julia types already have a default format associated to them and can
+be packed / unpacked without further instructions.
 ```julia
-import Pack
+using StructPack
 
-str = "This is a string" # Pack.StringFormat
-tup = ("tuple", 5, false) # Pack.VectorFormat
-ntup = (a = str, b = tup) # Pack.MapFormat
+str = "This is a string" # StringFormat by default
+tup = ("tuple", 5, false) # VectorFormat by default
+ntup = (a = str, b = tup) # StructFormat by default
 
-bytes = Pack.pack(ntup)
-Pack.unpack(bytes, typeof(ntup))
+bytes = pack(ntup)
+unpack(bytes, typeof(ntup))
 
 # or alternatively 
 
 io = IOBuffer()
-Pack.pack(io, ntup)
-Pack.unpack(io, typeof(ntup))
+pack(io, ntup)
+seekstart(io)
+unpack(io, typeof(ntup))
 ```
-The type information passed to `Pack.unpack` is crucial, since (by default) no
-type information is stored in `bytes`. If it is left out, `Pack.unpack(bytes)`
-tries to load `bytes` as generic msgpack object and returns a `Dict`.
+When `using StructPack` is issued, the functions [`pack`](@ref) and [`unpack`](@ref), the macro [`@pack`](@ref), and a set of built-in formats is exported.
 
-See the section ?? below on how to unpack objects `::T` when `T` is an abstract type.
+The type information passed to [`unpack`](@ref) is needed, since no such
+information is stored in `bytes`. If it is left out, `Pack.unpack(bytes)` tries
+to load `bytes` as generic msgpack object and returns a dictionary (since `ntup` is stored in the msgpack map format). We will [later](#Exploring-the-abstract) see how type information can be stored as well, enabling generic unpacking.
 
 ## Custom packing
 
-If you have defined your own struct and want to serialize each field via the
-default formats, you have two immediate options to do so.
+StructPack.jl gives you several out-of-the-box options how to serialize a custom structure.
 ```julia
 struct MyStruct
   a::Float64
   b::String
 end
 
-Pack.format(::MyStruct) = Pack.MapFormat     # save the field names a and b
+StructPack.format(::Type{MyStruct}) = MapFormat()
 # or
-Pack.format(::MyStruct) = Pack.VectorFormat  # do not save the field names
-```
-Pack.jl also provides the macro `@pack` that can conveniently be used to
-declare default formats: `Pack.@pack MyStruct in Pack.MapFormat`.
+StructPack.format(::Type{MyStruct}) = StructFormat()
+# or
+StructPack.format(::Type{MyStruct}) = UnorderedStructFormat()
+# or
+StructPack.format(::Type{MyStruct}) = VectorFormat()
 
-This macro has additional benefits: If you do not want to store all fields of
-MyStruct, or use a specific constructor when unpacking, you can easily inform
-`@pack` in combination with `MapFormat`.
+bytes = pack(MyStruct(0., "a string"))
+```
+In the first three cases, the binary `bytes` will coincide. The difference lies in the unpacking:
+[`MapFormat`](@ref) will (by default) not check if the keys in bytes confirm to `:a` and `:b`.
+[`StructFormat`](@ref), on the other hand, will perform such a consistency check.
+[`UnorderedStructFormat`](@ref) will also perform such a check.
+It is slower but can unpack msgpack binaries where the order of the entries are altered.
+
+```julia
+bytes1 = pack((a = 0., b = "a string")) # coincides with bytes
+bytes2 = pack((ab = 0., ba = "a string"))
+bytes3 = pack((b = 0., a = "a string"))
+
+# All of these will work as intended
+unpack(bytes1, MyStruct, MapFormat())
+unpack(bytes1, MyStruct, StructFormat())
+unpack(bytes1, MyStruct, UnorderedStructFormat())
+
+# This will fail for StructFormat and UnorderedStructFormat
+unpack(bytes2, MyStruct, MapFormat())
+
+# This will not work as intended for MapFormat and will fail for StructFormat
+unpack(bytes3, MyStruct, UnorderedStructFormat())
+```
+If you choose [`VectorFormat`](@ref), the keys `:a` and `:b` are not stored at all in `bytes`.
+Unpacking then only relies on the order of the arguments.
+In particular, `pack(MyStruct(0., "b"), VectorFormat()) == pack([0., "b"])`.
+
+To make the specification of default formats more convenient, StructPack.jl also provides the macro [`@pack`](@ref).
+```julia
+@pack MyStruct in StructFormat
+# is equivalent to
+StructPack.format(::Type{MyStruct}) = StructFormat()
+```
+This macro has additional benefits:
+If you do not want to store all fields of MyStruct, or use a specific constructor when unpacking, you can easily inform [`@pack`](@ref) in combination with [`StructFormat`](@ref) or [`UnorderedStructFormat`](@ref).
 ```julia
 # Special constructor we want to use during unpacking
-Mystruct(a; b) = MyStruct(a, b)
-Pack.@pack Mystruct in MapFormat MyStruct(a; b)
+MyStruct(a; b) = MyStruct(a, b)
+@pack MyStruct in StructFormat (a; b)
 
 # or
 
 # We only want to serialize the field a
-Mystruct(a) = MyStruct(a, "always the same")
-Pack.@pack MyStruct in MapFormat MyStruct(a)
+MyStruct(a) = MyStruct(a, "b is always the same")
+@pack MyStruct in StructFormat (a,)
 ```
-With a bit of additional work we have even more flexibility. For example, after
-we have decided to store only the field `MyStruct.a::Float64` anyway, we can
-just use `FloatFormat`.
+With a bit of additional code we have even more flexibility.
+For example, after we have decided to store only the field `MyStruct.a::Float64` anyway, we could just directly use [`FloatFormat`](@ref).
 ```julia
-Pack.format(::Type{MyStruct}) = FloatFormat()
-Pack.deconstruct(val::MyStruct, ::FloatFormat) = val.a
-Pack.construct(val::MyStruct, a, ::FloatFormat) = MyStruct(a, "always the same")
+StructPack.format(::Type{MyStruct}) = FloatFormat()
+StructPack.destruct(val::MyStruct, ::FloatFormat) = val.a
+StructPack.construct(val::MyStruct, a, ::FloatFormat) = MyStruct(a)
 ```
-See the docstrings for the various supported formats to learn about the
-respective requirements for `destruct` and `construct`.
+The functions [`destruct`](@ref) and [`construct`](@ref) are called before packing and after unpacking.
+Consult the docstrings of the various in-built formats to learn about their respective requirements for these functions.
 
-## Context matters: Fields
+## Parents matter
 
-Pack.jl strives to be flexible when handling custom structs. In particular, it
-disagrees that a given value `v::T` should always be serialized in the same way,
-independent of the context.
+StructPack.jl strives to be flexible when handling custom structs. In particular, it
+disagrees that a given value `val::T` should always be serialized in the same way,
+independent of the circumstances.
 
-There are two primary mechanism to attach context information to `v::T` while it
-is being packed or unpacked: via its (potential) *parent* or via *scopes*.
+There are two primary mechanism to enforce context-dependent customizations when packing and unpacking `val`:
+Via its parent structure, or via [`Context`](@ref) objects.
 
 Here is a simple example where a field (the child) of a struct (the parent)
 receives a non-default format.
-
 ```julia
-import Pack: MapFormat, BinVectorFormat
-
-struct MyStruct
-  a::String           # Default format is Pack.StringFormat
-  b::Vector{Float32}  # Default format is Pack.VectorFormat
+struct MyOtherStruct
+  a::String           # Default format is StringFormat
+  b::Vector{Float32}  # Default format is VectorFormat
 end
 
 # We decide that MyStruct.b should rather be stored as binary vector
-Pack.@pack MyStruct in MapFormat (b in BinVectorFormat)
-
-value = MyStruct("My data is stored in binary", rand(Float32, 10))
-bytes = pack(value)     # serialize the structure
-unpack(bytes, MyStruct) # unpack the object again
+@pack MyOtherStruct in StructFormat [b in BinVectorFormat]
 ```
-Under the hood, this behavior is implemented by specializing the function
-`valueformat`, which determines the formats to be used for struct fields.
-For example, the following code reproduces the call to `@pack` shown above:
+The auxiliary format [`BinVectorFormat`](@ref) causes that `MyOtherStruct.b` will be stored in the msgpack binary format.
+Without further effort, this only works for types `Vector{F}` where `isbitstype(F)` is true.
+
+Note that this call to [`@pack`](@ref) can be combined with the specification of a particular constructor (as above).
+
+## Context matters
+
+Another way to modify the format of a given value `val::T` are context objects, realized as singleton subtypes of [`Context`](@ref).
+Context objects are particularly useful if you desired to change how `val::T` is serialized throughout (a part of) your code, but are reluctant to modify the global behavior for all values of type `T`.
+For example, `T` might belong to a third party package and you do not want to mess with its packing defaults.
 ```julia
-Pack.format(::Type{MyStruct}) = MapFormat()
+struct MyContext <: StructPack.Context end
 
-function Pack.valueformat(::Type{MyStruct}, index)
-  index == 2 ? BinVectorFormat() : DefaultFormat()
-end
+# Under MyContext, MyOtherStruct.b is packed in ArrayFormat
+# and the field order does not matter for unpacking
+@pack MyContext MyOtherStruct in UnorderedStructFormat [b in ArrayFormat]
+
+value = MyOtherStruct("Is my data stored in binary?", rand(Float32, 10))
+bytes1 = pack(value, MyContext()) # ArrayFormat is used for field b
+bytes2 = pack(value)              # BinVectorFormat is used for field b
+
+# Unpacking must also get informed about the context
+unpack(bytes1, MyOtherStruct, MyContext())
+unpack(bytes2, MyOtherStruct)
 ```
 
-## Context matters: Rules
+Here you have encountered [`ArrayFormat`](@ref).
+This auxiliary format is able to store and recover (multidimensional) arrays by also storing the array size (see also [`BinArrayFormat`](@ref)).
 
-Another way to modify the format of `v::T` in a call to `pack` or
-`unpack` are so-called *rules*, realized as singleton subtypes of [`Rules`](@ref).
-Rules are particularly useful if you desired to change how `v::T` is serialized
-but are reluctant to modify the global behavior for all values of type `T` (for
-example, because `::T` belongs to a third party package and you do not want to
-mess with its defaults).
+For convenience, it is also possible to temporarily alter the default context for a block of code via the scoped value [`context`](@ref).
 
-Rules are most conveniently created with the macro `Pack.@rules`.
 ```julia
-import Pack: ArrayFormat
+using Base.ScopedValues
 
-# In this scope, MyStruct.b is packed via ArrayFormat
-rules = Pack.@rules MyStruct in MapFormat (b in ArrayFormat)
-
-value = MyStruct("My data is stored as array", rand(Float32, 10))
-bytes = pack(value, rules)
-unpack(bytes, MyStruct, rules)
-
-# or alternatively
-
-with(Pack.rules=>rules) do
-  bytes = pack(value)
-  unpack(bytes, MyStruct)
+with(StructPack.context=>MyContext()) do
+  bytes = pack(value) # ArrayFormat is used
+  unpack(bytes, MyOtherStruct)
 end
 ```
-Rules can be used to influence nearly each aspect of the serialization,
-since they penetrate each packing related call (`pack`, `unpack`, `format`,
-`valueformat`, and so on). In order to add a rule, just specialize the
-respective method.
-
-Without macros, the example above can be reproduced as follows:
+Contexts can reach into and alter nearly each aspect of the serialization, as they penetrate into each packing related call ([`pack`](@ref), [`unpack`](@ref), [`format`](@ref), ...).
+In general, to add a custom rule for your context, you can just overload the respective function with a trailing argument for the context.
+For example, the following are equivalent:
 ```julia
-struct MyRules <: Rules end
+@pack MyContext MyOtherStruct in StructFormat
+# and
+StructPack.format(::Type{MyOtherStruct}, ::MyContext) = StructFormat()
+```
+[Below](#A-world-without-macros), we discuss in more detail which functions are commonly overloaded when employing the [`@pack`](@ref) macro. 
 
-format(::Type{MyStruct}, ::MyScope) = MapFormat()
 
-function Pack.valueformat(::Type{MyStruct}, index, ::MapFormat, ::MyRules)
-  index == 2 ? ArrayFormat() : DefaultFormat()
+## Contexts: Case study
+
+As mentioned above, contexts are useful to prevent the following uglyness:
+You want to serialize a type `B.A` from a package `B` in another way than the maintainers of package `C` want to serialize `B.A`.
+In general, the rule is to never set global default formats for types that you do not own.
+Always use the parent-mechanism or a dedicated context for such types.
+
+However, the main reason why I have included contexts into StructPack.jl is a different one.
+Imagine you want to save and load project files that capture some aspect of a program you are developing (think of a save state in a game).
+The first version, v1, might correspond directly to your project structure.
+```julia
+struct Project
+  a::String
+  b::Int
+  c::Float64
 end
 
-with(Pack.rules=>MyRules()) do
-  bytes = pack(value
-  unpack(bytes, MyStruct)
+@pack Project in StructFormat
+
+saveproject(path, p::Project) = open(path, "w") do io
+  pack(io, p)
+end
+
+loadproject(path) = open(path, "r") do io
+  unpack(io, Project)
+end
+
+saveproject("myproject.pack", Project("test", 5, 0.))
+```
+Great! For version v2, however, you add a new feature and your project structure changes. It now looks like this:
+```julia
+struct Project
+  c::Float64
+  b::Tuple{Int, Int}
+  a::String
+  d::Bool
+end
+```
+What to do with your now defunct project file `myproject.pack`?
+Of course, you could make up a mock structure `ProjectV1` that mirrors the old format and provides a conversion function.
+Or you could just unpack `myproject.pack` as a dictionary and convert it back to a struct. 
+
+In complicated settings, however, both of these options are cumbersome.
+This is especially true if several structs (that may be children of `Project`) change, maybe only slightly.
+You then either have to keep slight variations of countles struct copies around, or have to plow your way through nested dicts.
+The same horror continues with the next version v3.
+
+Here, contexts in concert with the [`@pack`](@ref) macro become very useful.
+```julia
+struct CompatV1V2 <: StructPack.Context end
+
+v1_to_v2(a, b, c) = Project(c, (b, b), a, false)
+
+@pack CompatV1V2 Project in StructFormat v1_to_v2(a, b::Int, c)
+
+loadproject_v2(path) = open(path, "r") do io
+  unpack(io, Project, CompatV1V2())
+end
+
+p = loadproject_v2("myproject.pack")
+```
+Note that the context `CompatV1V2` is "ill-defined", in that you cannot pack and consequtively unpack an object of type `Project` in it (since we had to lie about the type of `Project.b`, which is ignored by packing but respected by unpacking).
+However, we only need it for loading anway.
+
+The value of this approach might not be too apparent in this simple example, but its composability pays when `Project` contains nested custom structs.
+In fact, we could even handle renamed fields quite principled by specializing [`StructPack.fieldnames`](@ref) given the context `CompatV1V2`.
+
+## A world without macros
+
+How does the [`@pack`](@ref) macro work?
+Under the hood, it just overloads relevant packing functions.
+This means that every effect achievable via [`@pack`](@ref) can quite easily be achieved without macro as well, albeit at the cost of more code.
+
+For example, the macro call
+```julia
+@pack C A in StructFormat (a, c::Tc; b) [b in Fb]
+```
+is essentially expanded to
+```julia
+StructPack.format(::Type{A}, ::C) = StructFormat()
+
+StructPack.destruct(val::A, ::C) = (val.a, val.c, val.b)
+
+function StructPack.construct(::Type{A}, pairs, ::C)
+  args = (pairs[1][2], pairs[2][2])
+  kwargs = (pairs[3],)
+  A(args...; kwargs...)
+end
+
+StructPack.fieldnames(::Type{A}, ::C) = (:a, :c, :b)
+
+function StructPack.fieltypes(::Type{A}, ::C)
+  # This is actually solved via a generated function, so the calls to fieldtype
+  # take place before compile time
+  (fieldtype(A, :a), Tc, fieldtype(A, :b))
+end
+
+function StructPack.fieldformats(::Type{A}, ::C)
+  (DefaultFormat(), DefaultFormat(), Fb())
 end
 ```
 
-## Unpacking the abstract
+## Exploring the Abstract
+Until now, we have only considered unpacking when we knew the concrete type of our object beforehand.
+This implies heavy limitations.
+For example, what would we do in the following situation?
 
+```julia
+abstract type Vehicle end
 
+struct Boat <: Vehicle
+  a::Int
+end
+
+struct Train <: Vehicle
+  b::Float64
+end
+
+struct Ticket
+  price::Float64
+  vehicle::Vehicle
+end
+```
+Here we have to call `unpack(..., Vehicle)` at some point, which clearly does not tell us about the underlying msgpack layout beforehand.
+To resolve this issue, it is necessary that some type information is stored alongside the value.
+
+In StructPack.jl, this problem is solved via the special auxiliary format [`TypedFormat`](@ref).
+```julia
+@pack {<: Vehicle} in TypedFormat{StructFormat}
+
+bytes = pack(Boat(42)) # This will be a lot of bytes...
+unpack(bytes, Vehicle) # ... but this will work!
+```
+Now, packing a value of type `Vehicle` will actually store a msgpack map with the two keys `:type` and `:value`, the first of which contains type information sufficient to reconstruct the concrete type.
+The value stored behind the key `:value` will be formatted in [`StructFormat`](@ref).
+
+This is very convenient. However, you should realize that we approach potentially dangerous territory here.
+This is true in at least two respects:
+
+* The performance of packing and unpacking suffers considerably when using [`TypedFormat`](@ref).
+  This means that you should probably avoid storing lots and lots of values in this format. 
+* Unpacking in [`TypedFormat`](@ref) is potentially unsafe, since arbitrary constructors could be triggered.
+  Care is taken that `eval` is never called, and that the type in question is a subtype of `Vehicle`, **BUT** when storing and restoring type parameters (e.g., the `F` in `Vector{F}`), the default behavior is that **any type** could be reconstructed, meaning that **any constructor** could be called if malicious data is unpacked in this format.
+
+The second of these issue (arbitrary constructor evaluation) is arguably better than plain old arbitrary code execution, but it is still unacceptable in sensitive settings.
+For that reason, the user is given fine grained control about which constructors are allowed to be executed via the scoped value [`whitelist`](@ref).
+
+For example, when you call
+```julia
+using ScopedValues
+
+with(StructPack.whitelist=>[Vehicle])
+  unpack(bytes, Vehicle)
+end
+```
+only the [`construct`](@ref) routines of subtypes of `Vehicle` are allowed when performing unpacking in [`TypedFormat`](@ref).
+Alternatively, whitelists can also be defined via singleton subtypes of [`Whitelist`](@ref) in combination with [`whitelisted`](@ref).

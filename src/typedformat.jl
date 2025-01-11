@@ -7,11 +7,17 @@ types) to the scoped value [`StructPack.whitelist`](@ref).
 """
 abstract type Whitelist end
 
+"""
+    whitelisted(w, T::Type)
+
+Check whether calling constructors of `T` is permitted according to the
+whitelist `w`.
+"""
 whitelisted(::Whitelist, ::Type) = false
 whitelisted(types::Vector{Type}, T::Type) = any(S -> T <: S, types)
 
 """
-Default whitelist object that permits any constructor.
+Default whitelist that permits any constructor when unpacking in [`TypedFormat`](@ref).
 """
 struct PermissiveWhitelist <: Whitelist end
 
@@ -20,8 +26,22 @@ whitelisted(::PermissiveWhitelist, ::Type) = true
 """
 Scoped value that captures the active whitelist.
 
-It can either be of type [`Whitelist`](@ref), configured via
-[`whitelisted`](@ref), or a vector of accepted types.
+It can either be of type [`Whitelist`](@ref), configurable via overloading
+[`whitelisted`](@ref), or a vector of accepted (super-)types.
+
+It defaults to an instance of [`PermissiveWhitelist`](@ref).
+
+For example, it can be employed as follows:
+
+```julia
+using Base.ScopedValues
+
+with(StructPack.whitelist => [T1, T2, ...])
+  # All unpacking in TypedFormat in this block can only
+  # construct subtypes of T1, T2, ...
+  # ...
+end
+```
 """
 const whitelist = ScopedValue{Union{Whitelist, Vector{Type}}}(
   PermissiveWhitelist()

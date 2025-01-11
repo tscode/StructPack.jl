@@ -16,6 +16,7 @@ msgpack specification:
 - [`BoolFormat`](@ref) (msgpack boolean),
 - [`SignedFormat`](@ref) (msgpack negative / positive fixint, signed 8-64),
 - [`UnsignedFormat`](@ref) (msgpack positive fixint, unsigned 8-64),
+- [`FloatFormat`](@ref) (msgpack float32, float64)
 - [`StringFormat`](@ref) (msgpack fixstr, str 8-32),
 - [`BinaryFormat`](@ref) (msgpack bin 16, bin 32).
 
@@ -30,6 +31,7 @@ Additional convenience formats include
 - [`ArrayFormat`](@ref) (store multidimensional arrays),
 - [`BinVectorFormat`](@ref) (store vectors with bitstype elements efficiently),
 - [`BinArrayFormat`](@ref) (store multidimensional bitstype arrays efficiently),
+- [`TypeFormat`](@ref) (store types)
 - [`TypedFormat`](@ref) (store values and their type for generic unpacking).
 """
 abstract type Format end
@@ -48,13 +50,13 @@ abstract type AbstractMapFormat <: Format end
 """
 Abstract serialization context.
 
-A context can be introduced to enforce custom behavior when packing and
-unpacking values.
+A context can be introduced to temporarily enforce custom behavior when
+packing and unpacking values.
 
 In particular, a context can influence which formats are assigned to types (via
 [`format`](@ref)) or to fields of a struct (via [`valueformat`](@ref)). It can
 also influence how objects are processed before packing and after unpacking (via
-[`destruct`](@ref) and [`construct`(@ref)]).
+[`destruct`](@ref) and [`construct`](@ref)).
 """
 abstract type Context end
 
@@ -64,7 +66,7 @@ Context that directs packing / unpacking towards fallback implementations.
 This is an auxiliary type and should not come into contact with users of the
 package.
 
-!!! warn
+!!! warning
 
     Do not dispatch on `::DefaultContext` to provide global defaults.
     Always use [`Context`](@ref)-free methods for this purpose.
@@ -82,7 +84,7 @@ To pack / unpack in a given context `ctx::Context`, you can use this pattern:
 using Base.ScopedValues
 
 with(StructPack.context => ctx) do
-  # Do your packing / unpacking without passing cxt explicitly
+  # Do your packing / unpacking without passing ctx explicitly
   # ...
 end
 ```

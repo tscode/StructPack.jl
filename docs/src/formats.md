@@ -1,52 +1,64 @@
 
+```@meta
+CurrentModule = StructPack
+```
+
 # Formats
 
 ```@docs
-Pack.Format
+Format
 ```
 
-## Core Formats
+## Basic Formats
 
 ```@docs
-Pack.CoreFormat
-Pack.NilFormat
-Pack.BoolFormat
-Pack.SignedFormat
-Pack.UnsignedFormat
-Pack.StringFormat
-Pack.VectorFormat
-Pack.MapFormat
-Pack.BinaryFormat
+NilFormat
+BoolFormat
+SignedFormat
+UnsignedFormat
+FloatFormat
+StringFormat
+BinaryFormat
 ```
 
-## Array Formats
+## Vector and Array Formats
 
-Besides [`Pack.VectorFormat`](@ref), which directly mirrors the msgpack vector format, Pack.jl also provides convenience formats for storing multidimensional arrays.
+Besides [`VectorFormat`](@ref), which mirrors the msgpack vector format, StructPack.jl also provides convenience formats for storing isbits-vectors and multidimensional arrays.
+
 ```@docs
-Pack.ArrayFormat
-Pack.BinVectorFormat
-Pack.BinArrayFormat
+AbstractVectorFormat
+VectorFormat
+ArrayFormat
+BinVectorFormat
+BinArrayFormat
+DynamicVectorFormat
 ```
 
-## Dynamic Vector and Map Formats
+## Map Formats
+
+Besides the format [`MapFormat`](@ref), which mirrors the msgpack map format, StructPack.jl also provides specialized map implementations for structures.
 
 ```@docs
-Pack.DynamicVectorFormat
-Pack.DynamicMapFormat
+AbstractMapFormat
+MapFormat
+DynamicMapFormat
+AbstractStructFormat
+StructFormat
+UnorderedStructFormat
 ```
 
 ## Extra Formats
 
 ```@docs
-Pack.TypeFormat
-Pack.TypedFormat
+TypeFormat
+TypedFormat
 ```
 
 ## Special Formats
 
 ```@docs
-Pack.DefaultFormat
-Pack.AnyFormat
+DefaultFormat
+AnyFormat
 ```
 
 

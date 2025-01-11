@@ -162,10 +162,10 @@ end
     parse_constructor_expr(ex)
 
 Parse a constructor expression of the form `(a, b, ... ; c, d, ...)` or
-`C(a, b, ...; c, d, ...)`.
+`C(a, b, ...; c, d, ...)`. Each name can alternatively be of the form `a::Ta`, `b::Tb, ...` to associate the fieldnames to a type.
 
-Returns the named triple `(names = (a, b, ...), kwnames = (c, d, ...), and
-constructor = :C)`. In a constructor-less expression, `constructor = nothing`.
+Returns the named tuple `(names = (a, b, ...), kwnames = (c, d, ...), types,
+constructor = :C)`, where types is a dictionary containing entries `a=>:(Ta), ...`. In a constructor-less expression, `constructor = nothing`.
 """
 function parse_constructor_expr(ex)
   if !(ex isa Expr)
@@ -202,30 +202,43 @@ function parse_constructor_expr(ex)
   else
     return
   end
-  # Make sure names and kwnames are actually lists of symbols
-  if all(isa.(names, Symbol)) && all(isa.(kwnames, Symbol))
-    names = Symbol[name for name in names]
-    kwnames = Symbol[name for name in kwnames]
-    return (; names, kwnames, constructor)
+  nkwargs = length(kwnames)
+  names = vcat(names, kwnames)
+
+  # Split off possible type information
+  names_types = map(names) do name
+    if name isa Symbol
+      (name, nothing)
+    elseif name isa Expr &&
+      name.head == :(::) &&
+      length(name.args) == 2 &&
+      name.args[1] isa Symbol &&
+      is_type_expr(name.args[2])
+      name.args[1]=>name.args[2]
+    end
   end
-  return
+
+  # Collect all outputs
+  if all(!isnothing, names_types)
+    names = first.(names_types)
+    types = filter(pair -> !isnothing(pair[2]), names_types)
+    return (; names, nkwargs, types = Dict(types), constructor)
+  end
 end
 
-function code_constructor(target, names, kwnames, constructor)
-  symbols = (names..., kwnames...)
+function code_constructor(target, fieldnames, nkwargs, constructor)
   constructor = isnothing(constructor) ? target.type : constructor
-  len = length(names)
-  lenkw = length(kwnames)
+  len = length(fieldnames) - nkwargs
 
   return quote
     function StructPack.destruct(val::$(target.type), fmt::StructPack.AbstractStructFormat)
-      Iterators.map($symbols) do name
+      Iterators.map($fieldnames) do name
         name=>getfield(val, name)
       end
     end
 
     function StructPack.construct(::Type{$(target.type)}, pairs::Vector, fmt::StructPack.AbstractStructFormat)
-      if length(pairs) != length($symbols) 
+      if length(pairs) != length($fieldnames) 
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
       args = Iterators.map(last, @view(pairs[1:$len]))
@@ -234,10 +247,10 @@ function code_constructor(target, names, kwnames, constructor)
     end
 
     function StructPack.construct(::Type{$(target.type)}, pairs::Tuple, fmt::StructPack.AbstractStructFormat)
-      if length(pairs) != length($symbols) 
+      if length(pairs) != length($fieldnames) 
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
-      args = map(last, pairs[1:$len])
+      args = map(last, pairs[1:(end-$nkwargs)])
       kwargs = pairs[$len+1:end]
       $constructor(args...; kwargs...)
     end
@@ -293,18 +306,27 @@ function parse_fieldformats_expr(ex)
   return nothing
 end
 
-function code_fieldformats(target, fieldnames, formats)
+function code_fields(target, fieldnames, types, formats)
   if isnothing(fieldnames)
     fieldnames = :(Base.fieldnames($(target.type)))
+  else
+    fieldnames = Tuple(fieldnames)
   end
   return quote
+
     function StructPack.fieldnames(::Type{$(target.type)})
       return $fieldnames
     end
 
-    function StructPack.fieldtypes(::Type{$(target.type)})
+    @generated function StructPack.fieldtypes(::Type{$(target.type)})
       names = $fieldnames
-      return map(key -> Base.fieldtype($(target.type), key), names)
+      texprs = map(names) do key
+        Base.get($types, key) do
+          default = Base.fieldtype($(target.type), key)
+          :($default)
+        end
+      end
+      return Expr(:tuple, texprs...)
     end
 
     @generated function StructPack.fieldformats(::Type{$(target.type)})
@@ -313,9 +335,9 @@ function code_fieldformats(target, fieldnames, formats)
         F = Base.get($formats, key, :(StructPack.DefaultFormat))
         Expr(:call, F)
       end
-      formats = Expr(:tuple, fexprs...)
-      return formats
+      return Expr(:tuple, fexprs...)
     end
+
   end
 end
 
@@ -449,19 +471,22 @@ macro pack(args...)
 
   if !isnothing(r.cons)
     names = r.cons.names
-    kwnames = r.cons.kwnames
+    nkwargs = r.cons.nkwargs
     constructor = r.cons.constructor
-    block = code_constructor(target, names, kwnames, constructor)
+    block = code_constructor(target, names, nkwargs, constructor)
     append!(statements, block.args)
   end
 
-  if !isnothing(r.formats)
+  if !isnothing(r.formats) || !isnothing(r.cons)
+    formats = isnothing(r.formats) ? Dict() : r.formats
     if isnothing(r.cons)
       fieldnames = nothing
+      types = Dict()
     else
-      fieldnames = (r.cons.names..., r.cons.kwnames...)
+      fieldnames = r.cons.names
+      types = r.cons.types
     end
-    block = code_fieldformats(target, fieldnames, r.formats)
+    block = code_fields(target, fieldnames, types, formats)
     append!(statements, block.args)
   end
   

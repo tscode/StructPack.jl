@@ -1,38 +1,58 @@
+
+```@meta
+CurrentModule = StructPack
+```
+
 # API Reference
 
 ## Main API
 
 ```@docs
-Pack.format
-Pack.pack
-Pack.unpack
-Pack.construct
-Pack.destruct
+format
+pack
+unpack
+construct
+destruct
 ```
 
-## Keys and Values
+## Keys and values
 
 ```@docs
-Pack.keytype
-Pack.keyformat
-Pack.valuetype
-Pack.valueformat
-Pack.iterstate
+keytype
+keyformat
+valuetype
+valueformat
+iterstate
 ```
 
-## Auxiliary Types
-
+## Struct fields
 ```@docs
-Pack.Generator
-Pack.ArrayValue
-Pack.BinArrayValue
-Pack.TypeValue
-Pack.TypedValue
+fieldformats
+fieldtypes
+fieldnames
 ```
 
-## Typed Format
+## Auxiliary types
+
 ```@docs
-Pack.whitelisted
-Pack.typeparamtype
-Pack.typeparamformat
+Generator
+ArrayValue
+BinArrayValue
+TypeValue
+TypedValue
+```
+
+## Typed format
+```@docs
+typeparamtype
+typeparamformat
+Whitelist
+PermissiveWhitelist
+whitelisted
+```
+
+## Scoped values
+```@docs
+context
+whitelist
 ```

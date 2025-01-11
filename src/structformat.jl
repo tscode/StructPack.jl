@@ -7,7 +7,8 @@ abstract type AbstractStructFormat <: AbstractMapFormat end
 """
     fieldnames(T::Type [, ctx::Context])
 
-Return the field names of `T` when packing / unpacking in [`AbstractStructFormat`](@ref) under `ctx`.
+Return the field names of `T` when packing / unpacking in
+[`AbstractStructFormat`](@ref) under `ctx`.
 
 Defaults to `Base.fieldnames(T)`.
 """
@@ -17,7 +18,8 @@ fieldnames(T::Type, ::Context) = fieldnames(T)
 """
     fieldtypes(T::Type [, ctx::Context])
 
-Return the field types of `T` when packing / unpacking in [`AbstractStructFormat`](@ref) under `ctx`.
+Return the field types of `T` when packing / unpacking in
+[`AbstractStructFormat`](@ref) under `ctx`.
 
 Defaults to `Base.fieldtypes(T)`.
 """
@@ -27,7 +29,8 @@ fieldtypes(T::Type, ::Context) = fieldtypes(T)
 """
     fieldformats(T::Type [, ctx::Context])
 
-Return the field types of `T` when packing / unpacking in [`AbstractStructFormat`](ref) under `ctx`.
+Return the field types of `T` when packing / unpacking in
+[`AbstractStructFormat`](@ref) under `ctx`.
 """
 function fieldformats(::Type{T}) where {T}
   return ntuple(_ -> DefaultFormat(), length(fieldnames(T)))
@@ -99,7 +102,7 @@ the keys encountered during unpacking are consistent with `T`.
     - [`MapFormat`](@ref) is more flexible and can handle keys that are not
       symbols. In contrast, [`StructFormat`](@ref) requires static fieldtype, fieldname, and fieldformat information.
     
-    - However, [`MapFormat`](@ref) will not counter-check key values during unpacking and can thus easily lead to corrupted data if applied on external msgpack binaries. Both
+    - However, [`MapFormat`](@ref) will not counter-check key values during unpacking and can thus easily lead to corrupted data if applied on external msgpack binaries.
 """
 struct StructFormat <: AbstractStructFormat end
 
