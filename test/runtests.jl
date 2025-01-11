@@ -171,6 +171,23 @@ end
   @test StructPack.format(A, C2()) == UnorderedStructFormat()
   @test StructPack.fieldformats(A, C2()) == (DefaultFormat(), DefaultFormat(), StringFormat())
   @test packcycle(val, ctx = C2())
+
+  # Example from the documentation
+  struct C3 <: StructPack.Context end
+  struct P
+    c::Float64
+    b::Tuple{Int, Int}
+    a::String
+    d::Bool
+  end
+
+  cons(a, b, c) = P(c, (b, b), a, false)
+
+  @pack C3 P in StructFormat cons(a, b::Int, c)
+
+  bytes = pack((a = "testing", b = 5, c = 6.5))
+  p = unpack(bytes, P, C3())
+  @test cons("testing", 5, 6.5) == p
 end
 
 
