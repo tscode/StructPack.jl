@@ -24,7 +24,7 @@ While the functionality to read generic msgpack is included (currently without s
 ## Usage
 To pack or unpack a value `val::T` via StructPack.jl, you must assign its type `T` a format `F <: Format`.
 The format determines how the struct is mapped to msgpack.
-StructPack.jl offers a number of convenient formats [out of the box]](https://tscode.github.io/StructPack.jl/dev/formats/).
+StructPack.jl offers a number of convenient formats [out of the box](https://tscode.github.io/StructPack.jl/dev/formats/).
 
 Default formats for your type `T` can be specified via
 ```julia
@@ -97,7 +97,7 @@ val2 = unpack(bytes, D)
 @assert val.y == val2.y
 @assert val.z == val2.z
 ```
-In this example, bytes will be the msgpack equivalent of 
+In this example, `bytes` will be the msgpack equivalent of 
 ```js
 {
   z: {
@@ -107,7 +107,7 @@ In this example, bytes will be the msgpack equivalent of
       path: ["Main"],
     },
     value: {
-      a: 5
+      a: 5,
     },
   },
   y: {
@@ -177,7 +177,7 @@ The special format enabling this under the hood is the [`AnyFormat`](https://tsc
 > What about msgpack files that do not exactly fit my struct? Can I load them?
 
 It depends. There are different possibilites to approach this.
-- If you know the layout differences beforehand, because you want to load an old serialization of an updated struct, for example, you can use contexts together with the `@pack` to go quite far with this. See [here](https://tscode.github.io/StructPack.jl/dev/usage/#Contexts:-Case-study).
+- If you know the layout differences beforehand, because you want to load an old serialization of an updated struct, for example, you can use contexts together with [`@pack`](https://tscode.github.io/StructPack.jl/dev/macro) to go quite far with this. See [here](https://tscode.github.io/StructPack.jl/dev/usage/#Contexts:-Case-study).
 - If you know that all struct fields will be there, but the sorting may be off, you can use [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat).
 - If you do not know beforhand if some of the fields are missing / superfluous, there is no format that currently handles this out of the box.
   If you need, it, however, it should be simple to define a `FlexibleStructFormat <: StructFormat` that essentially copies [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat) and (1) removes the field consistency checks and (2) uses a keyword argument based construct function by default.
