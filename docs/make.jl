@@ -15,3 +15,7 @@ makedocs(
       "API Reference" => "reference.md",
   ]
 )
+
+deploydocs(
+    repo = "github.com/tscode/StructPack.jl.git",
+)
