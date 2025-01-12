@@ -140,15 +140,6 @@ end
   @test val == unpack(bytes, B, UnorderedStructFormat())
 end
 
-@testset "TypedFormat" begin
-  val = rand(Int64, 10)
-  @test packcycle(val, Array, fmt = TypedFormat())
-  val = C((2, "test", 1e18), "This is a test")
-  StructPack.valueformat(::Type{C}, index, ::TypedFormat) = TypedFormat()
-  @test packcycle(val, fmt = VectorFormat())
-  @test packcycle(val, Any, fmt = TypedFormat{StructFormat}())
-end
-
 @testset "Context" begin
   struct C1 <: StructPack.Context end
   StructPack.format(::Type{A}, ::C1) = VectorFormat()
@@ -190,4 +181,21 @@ end
   @test cons("testing", 5, 6.5) == p
 end
 
+@testset "TypedFormat" begin
+  val = rand(Int64, 10)
+  @test packcycle(val, Array, fmt = TypedFormat())
+
+  val = C((2, "test", (1e18, 5)), "This is a test")
+  @test !packcycle(val, fmt = StructFormat())
+  @test !packcycle(val, fmt = VectorFormat())
+  StructPack.fieldformats(::Type{C}) = (TypedFormat(), TypedFormat())
+  @test packcycle(val, fmt = StructFormat())
+  @test !packcycle(val, fmt = VectorFormat())
+
+  StructPack.valueformat(::Type{C}, index, ::VectorFormat) = TypedFormat()
+  @test packcycle(val, fmt = StructFormat())
+  @test packcycle(val, fmt = VectorFormat())
+
+  @test packcycle(val, Any, fmt = TypedFormat{StructFormat}())
+end
 

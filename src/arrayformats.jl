@@ -41,21 +41,16 @@ Contains the fields `size` and `data`, the latter of which is usually a
 `Generator` after reconstruction via unpack.
 """
 struct ArrayValue{T}
-  datatype::Symbol
   size::NTuple{N, Int} where {N}
   data::T
 end
 
-format(::Type{<:ArrayValue}) = MapFormat()
-
-function valueformat(::Type{<:ArrayValue}, state, ::MapFormat)
-  return state == 3 ? VectorFormat() : DefaultFormat()
-end
+format(::Type{<:ArrayValue}) = StructFormat()
+fieldformats(::Type{<:ArrayValue}) = (DefaultFormat(), VectorFormat())
 
 function pack(io::IO, value, ::ArrayFormat, ctx::Context)::Nothing
   val = destruct(value, ArrayFormat(), ctx)
-  datatype = Base.eltype(val) |> string |> Symbol
-  return pack(io, ArrayValue(datatype, size(val), val), ctx)
+  return pack(io, ArrayValue(size(val), val), ctx)
 end
 
 function unpack(io::IO, ::Type{T}, ::ArrayFormat, ctx::Context)::T where {T}
@@ -148,21 +143,16 @@ Contains the fields `size` and `data`, the latter of which is a `Vector{UInt8}`
 after reconstruction via unpack.
 """
 struct BinArrayValue{T}
-  datatype::Symbol  # Only metadata, not checked during construction of arrays
   size::NTuple{N, Int} where {N}
   data::T
 end
 
-format(::Type{<:BinArrayValue}) = MapFormat()
-
-function valueformat(::Type{<:BinArrayValue}, state, ::MapFormat)
-  return state == 3 ? BinaryFormat() : DefaultFormat()
-end
+format(::Type{<:BinArrayValue}) = StructFormat()
+fieldformats(::Type{<:BinArrayValue}) = (DefaultFormat(), BinVectorFormat())
 
 function pack(io::IO, value, ::BinArrayFormat, ctx::Context)
   val = destruct(value, BinArrayFormat(), ctx)
-  datatype = Base.eltype(val) |> string |> Symbol
-  pack(io, BinArrayValue(datatype, size(val), val), ctx)
+  pack(io, BinArrayValue(size(val), val), ctx)
   return
 end
 

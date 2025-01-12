@@ -35,7 +35,7 @@ end
 
 valuetype(::Type{NTuple{N, T}}, vals, ::AbstractVectorFormat) where {N, T} = T
 
-# Pack {<: NamedTuple} in MapFormat by default
+# Pack {<: NamedTuple} in StructFormat by default
 format(::Type{<:NamedTuple}) = StructFormat()
 
 destruct(val::NamedTuple, ::AbstractMapFormat) = pairs(val)
@@ -73,7 +73,7 @@ end
 
 construct(T::Type, vals, ::AbstractVectorFormat) = T(vals...)
 
-# Support packing structs in MapFormat
+# Support packing structs in AbstractMapFormat
 function destruct(value::T, ::AbstractMapFormat) where {T}
   n = Base.fieldcount(T)
   Iterators.map(1:n) do index

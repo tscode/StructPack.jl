@@ -1,17 +1,16 @@
 
 # StructPack.jl
 
-This package is for people who want to efficiently serialize their beloved
-structures in a simple and transparent way. It operates on top of the binary
-[msgpack standard](https://msgpack.org/index.html).
+This [julia](https://julialang.org) package is for people who want to efficiently serialize their beloved structures in a simple, flexible, and transparent way.
+It operates on top of the binary [msgpack standard](https://msgpack.org/index.html).
 
 You might like this package because it
 
 - is pure and straightforward julia with no dependencies.
-- has an easy interface.
 - is very flexible, with context-dependent format choices.
-- avoids uncontrolled code execution during unpacking.
+- has an easy interface.
 - is reasonably fast.
+- avoids uncontrolled code execution during unpacking.
 - produces sound msgpack files that can be read universally.
 
 On the other hand, StructPack.jl is (probably) not the right choice if you
@@ -20,13 +19,36 @@ On the other hand, StructPack.jl is (probably) not the right choice if you
 - have enormous files and need lazy loading capabilities.
 - want to read arbitrary msgpack files from external sources.
 
-While the functionality to read generic msgpack is included (currently without
-support for extensions), you should in this case also consider the excellent
-package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which serves as
-inspiration for StructPack.jl.
+While the functionality to read generic msgpack is included (currently without support for extensions), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
 
-## 
-The following snippet of code demonstrates some of the features of StructPack.jl.
+## Usage
+To pack or unpack a value `val::T` via StructPack.jl, you must assign its type `T` a format `F <: Format`.
+The format determines how the struct is mapped to msgpack.
+StructPack.jl offers a number of convenient formats [out of the box]](https://tscode.github.io/StructPack.jl/dev/formats/).
+
+Default formats for your type `T` can be specified via
+```julia
+StructPack.format(::Type{T}) = F()
+```
+or via the convenience macro
+```julia
+@pack T in F
+```
+You can then pack and unpack your value as follows:
+```julia
+val = ... # create some value of type T
+
+bytes = pack(val)
+val = unpack(bytes, T)
+```
+Alternatively, you can specify formats directly when calling the functions `pack` and `unpack`:
+```julia
+bytes = pack(val, F())
+val = unpack(bytes, T, F())
+```
+You can also let the format depend on a [surrounding struct](https://tscode.github.io/StructPack.jl/dev/usage/#Parents-matter) or on so-called [contexts](https://tscode.github.io/StructPack.jl/dev/usage/#Context-matters).
+
+The following snippet demonstrates some of the features of StructPack.jl.
 ```julia
 using StructPack
 
@@ -42,37 +64,79 @@ struct C <: A
 end
 
 struct D
-  a::String
-  b::Matrix{B}
-  d::A
+  x::String
+  y::Matrix{B}
+  z::A
 end
 
-D(d; b) = D("default", b, d)
+D(z; y) = D("default", y, z)
 
+# Subtypes of A should be stored in StructFormat by default
 @pack {<: A} in StructFormat
-@pack D in StructFormat D(d; b) [b in BinArrayFormat, d in TypedFormat]
+
+# D should be stored in StructFormat, but only save the fields z and y
+# (in this order) and use a special constructor to built it.
+#
+# Furthermore, the B-Matrix behind y should be stored in a special array format
+# that efficiently stores binary data (works because isbitstype(B) == true).
+#
+# Lastly, since z is assigned an abstract type, we have to store the type
+# information alongside its value.
+@pack D in StructFormat D(z; y) [y in BinArrayFormat, z in TypedFormat]
+
+# Create a matrix of B entries and the value you seek to serialize
+y = B.([1, 2, 3], rand(5)')
+val = D(C(5); y)
+
+# You could also write to / read from an io here
+bytes = pack(val)
+
+val2 = unpack(bytes, D)
+
+@assert val.x == val2.x
+@assert val.y == val2.y
+@assert val.z == val2.z
 ```
-For more examples and detailed information about about usage, see the package
-documentation.
+In this example, bytes will be the msgpack equivalent of 
+```js
+{
+  z: {
+    type: {
+      name: "C",
+      params: [],
+      path: ["Main"],
+    },
+    value: {
+      a: 5
+    },
+  },
+  y: {
+    datatype: "B", <!-- not used, only there for cosmetics -->
+    size: [3, 5],
+    data: UInt8[...],
+  },
+}
+```
+See [this tutorial](https://tscode.github.io/StructPack.jl/dev/usage/) for a more thorough explanation of the capabilities of StructPack.jl.
 
 ## Rationale
 
-Julia already offers a wealth of packages that can be used for data serialization and storage. Besides `Base.Serialization`, this includes
+Julia already offers a wealth of packages that can be used for data serialization and storage.
+Besides `Base.Serialization`, this includes
 [JLD.jl](https://github.com/JuliaIO/JLD.jl),
 [JLD2.jl](https://github.com/JuliaIO/JLD2.jl),
 [JSON.jl](https://github.com/JuliaIO/JSON.jl),
 [JSON3.jl](https://github.com/quinnj/JSON3.jl),
 [BSON.jl](https://github.com/JuliaIO/BSON.jl),
 [Serde.jl](https://github.com/bhftbootcamp/Serde.jl),
-[MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), and likely many others.
+[MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl),
+and likely many others.
 So why does StructPack.jl deserve to exist?
 
-In previous projects, I often found myself in situations where I wanted to
-permanantly, reliably and efficiently store custom julia structs that contained
-binary data. Loading should not be able to execute arbitrary code, since I would
-not always trust the source. At the same time, I wanted enough flexibility to
-reconstruct a value based on abstract type information only, in a controlled
-way.
+In previous projects, I often found myself in situations where I wanted to permanantly, reliably and efficiently store custom julia structs that contained binary data.
+When something about my structs would change, I desired a transparent mechanism to implement backward compatability.
+I wanted enough flexibility to reconstruct a value based on abstract type information only, in a controlled way.
+At the same time, loading should not be able to execute arbitrary code, since I would not always trust the source blindly.
 
 Oh, and the interface should be straightforward. And the code base should be
 transparent and avoid complexities, as far as possible. Ideally, it should also
@@ -80,54 +144,40 @@ be compatible to a universally used format.
 
 Thus, this package was born. May it help you.
 
+## Q&A
 
-<!-- #### Are macros necessary? -->
+> Say, is this package well-tested, performance optimized, and 100% production ready?
 
-<!-- If you are not happy with the `@pack` macro due to its intransparency or -->
-<!-- limitations, the following will establish the same functionality: -->
-<!-- ```julia -->
-<!-- # @pack {<: A} in StructFormat -->
-<!-- StructPack.format(Type{<: A}) = StructFormat() -->
+Well... not really.
+None of the three, probably.
+Tests cover basic functionality but are not exhaustive.
+Performance is decent but could likely be improved, especially for typed serialization via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat).
+However, the design should be fixed and the API more or less stable.
+Features that are currently not supported are unlikely to make it into a future release, unless they fit neatly and don't increase code complexity by much.
 
-<!-- # @pack D in StructFormat ... -->
-<!-- StructPack.format(Type{<: B}) = StructFormat() -->
+What will most certainly make it into future releases is a better default support for types in `Base`.
+Support for popular types and standard packages could also rather easily be added via package extensions.
+I will patiently be waiting for corresponding issues and pull requests.
 
-<!-- # ... D(d; b) ... -->
-<!-- StructPack.destruct(val::D, ::StructFormat) = (:d=>val.d, b=>val.+) -->
-<!-- StructPack.construct(::Type{D}, pairs, ::StructFormat) = D(pairs[1][2]; b = pairs[2][2]) -->
-<!-- StructPack.fieldtypes(::Type{D}, ::StructFormat) = (Matrix{B}, A) -->
+> Can I trust you that [`unpack`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.unpack) does not destroy my computer and the internet?
 
-<!-- # ... [b in BinArrayFormat, d in TypedFormat] -->
-<!-- StructPack.fieldformats(::Type{D}, ::StructFormat) = (BinArrayFormat(), TypedFormat()) -->
+Certainly not!
+But I tried my best to make it potentially safe.
+- StructPack.jl never calls `eval`.
+- Still, when unpacking via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat), the default behavior is to allow arbitrary constructors to be called, which could probably lead to arbitrary code execution.
+  This happens because it was hard for me to find a generic way to enforce sound type boundaries when unpacking type parameters that are values (e.g., how do I find out that the `N` in `Array{N, F}` must be an `Int`? I would be very pleased about hints...).
+- Thus, to make [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat) available in sensitive settings, you can optionally whitelist constructors / types that you trust (see the comments [here](https://tscode.github.io/StructPack.jl/dev/usage/#Exploring-the-Abstract)).
 
-<!-- ## Answers to be questioned -->
 
-<!-- > Is this package well-tested, performance optimized, and 100% production ready? -->
+> Can I load generic msgpack files?
 
-<!-- Well... no. None of the three, probably. But the design should be fixed and the -->
-<!-- API stable. Features that are currently not supported are unlikely to make it -->
-<!-- into a future release. Unless they fit neatly and don't increase code complexity -->
-<!-- by much. -->
+This should work as long as your file does not make use of extensions of the msgpack format.
+The special format enabling this under the hood is the [`AnyFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.AnyFormat).
+ 
+> What about msgpack files that do not exactly fit my struct? Can I load them?
 
-<!-- What will make it into future releases is a better out-of-the-box support for -->
-<!-- types in `Base`, which is currently very limited but which is easily extensible. -->
-<!-- Also, support for additional popular types can easily be added via package -->
-<!-- extensions. I will patiently be waiting for corresponding issues and pull -->
-<!-- requests. -->
-
-<!-- > Can I trust you that `unpack` does not let chaos and havoc in my digital world? -->
-
-<!-- Certainly not! I tried my best to prevent uncontrolled code execution (by never -->
-<!-- using `eval` and by making sure that types are whitelisted before calling their -->
-<!-- constructors in `TypedFormat`), but maybe this is not enough. Also, another -->
-<!-- package you load and whose data you want to store may extend StructPack.jl in a way -->
-<!-- that is nasty. So the honest answer is: I don't know. -->
-
-<!-- > What if I read external msgpack files? Can I generically load them? -->
-
-<!-- I tend to agree. It would be easy to solve this problem with a new format, -->
-<!-- but I am currently not sure about the best way to incorporate this. The main -->
-<!-- hinderance is that such a potential `UnorderedMapFormat` has to be less general -->
-<!-- than `MapFormat`, since the type and formats of the key objects cannot be easily -->
-<!-- determined. It should thus probably be implemented as `UnorderedStructFormat` -->
-<!-- and expect symbols as keys. Along this line, one could also implement `StructFormat`, which is `MapFormat` specialized to symbols as keys. -->
+It depends. There are different possibilites to approach this.
+- If you know the layout differences beforehand, because you want to load an old serialization of an updated struct, for example, you can use contexts together with the `@pack` to go quite far with this. See [here](https://tscode.github.io/StructPack.jl/dev/usage/#Contexts:-Case-study).
+- If you know that all struct fields will be there, but the sorting may be off, you can use [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat).
+- If you do not know beforhand if some of the fields are missing / superfluous, there is no format that currently handles this out of the box.
+  If you need, it, however, it should be simple to define a `FlexibleStructFormat <: StructFormat` that essentially copies [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat) and (1) removes the field consistency checks and (2) uses a keyword argument based construct function by default.
