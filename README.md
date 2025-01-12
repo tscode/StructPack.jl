@@ -1,5 +1,7 @@
-
 # StructPack.jl
+
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://tscode.github.io/StructPack.jl/)
+[![Build Status](https://github.com/tscode/StructPack.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/tscode/StructPack.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 This [julia](https://julialang.org) package is for people who want to efficiently serialize their beloved structures in a simple, flexible, and transparent way.
 It operates on top of the binary [msgpack standard](https://msgpack.org/index.html).
