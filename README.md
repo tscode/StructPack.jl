@@ -17,11 +17,20 @@ You might like this package because it
 
 On the other hand, StructPack.jl is (probably) not the right choice if you
  
-- need to serialize arbitrary julia objects out-of-the-box.
+- need to serialize arbitrary julia objects (functions, ...).
 - have enormous files and need lazy loading capabilities.
 - want to read arbitrary msgpack files from external sources.
 
 While the functionality to read generic msgpack is included (currently without support for extensions), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
+
+## Installation
+You can install StructPack.jl from the general julia registry.
+```julia
+using Pkg
+Pkg.add("StructPack")
+```
+Since some of its functionality depends on scoped values, it currently requires a julia version of 1.11 or newer.
+This might be relaxed if there is demand.
 
 ## Usage
 To pack or unpack a value `val::T` via StructPack.jl, you must assign its type `T` a format `F <: Format`.
@@ -40,6 +49,8 @@ You can then pack and unpack your value as follows:
 ```julia
 val = ... # create some value of type T
 
+# You may also use an io as first argument
+# in calls to pack / unpack
 bytes = pack(val)
 val = unpack(bytes, T)
 ```
@@ -48,7 +59,7 @@ Alternatively, you can specify formats directly when calling the functions `pack
 bytes = pack(val, F())
 val = unpack(bytes, T, F())
 ```
-You can also let the format depend on a [surrounding struct](https://tscode.github.io/StructPack.jl/dev/usage/#Parents-matter) or on so-called [contexts](https://tscode.github.io/StructPack.jl/dev/usage/#Context-matters).
+You can also let the format depend on a [surrounding struct](https://tscode.github.io/StructPack.jl/dev/usage/#Parents-matter) or on a so-called [`Context`](https://tscode.github.io/StructPack.jl/dev/usage/#Context-matters).
 
 The following snippet demonstrates some of the features of StructPack.jl.
 ```julia
@@ -90,9 +101,7 @@ D(z; y) = D("default", y, z)
 y = B.([1, 2, 3], rand(5)')
 val = D(C(5); y)
 
-# You could also write to / read from an io here
 bytes = pack(val)
-
 val2 = unpack(bytes, D)
 
 @assert val.x == val2.x
@@ -113,7 +122,6 @@ In this example, `bytes` will be the msgpack equivalent of
     },
   },
   y: {
-    datatype: "B", <!-- not used, only there for cosmetics -->
     size: [3, 5],
     data: UInt8[...],
   },
@@ -136,9 +144,9 @@ and likely many others.
 So why does StructPack.jl deserve to exist?
 
 In previous projects, I often found myself in situations where I wanted to permanantly, reliably and efficiently store custom julia structs that contained binary data.
-When something about my structs would change, I desired a transparent mechanism to implement backward compatability.
-I wanted enough flexibility to reconstruct a value based on abstract type information only, in a controlled way.
-At the same time, loading should not be able to execute arbitrary code, since I would not always trust the source blindly.
+When something about my structs would change, I wanted a transparent mechanism to implement backward compatability.
+I also wanted enough flexibility to reconstruct a value based on abstract type information only, in a controlled way.
+Loading this value should not be able to execute arbitrary code, since I would not always trust the source blindly.
 
 Oh, and the interface should be straightforward. And the code base should be
 transparent and avoid complexities, as far as possible. Ideally, it should also
@@ -148,9 +156,8 @@ Thus, this package was born. May it help you.
 
 ## Q&A
 
-> Say, is this package well-tested, performance optimized, and 100% production ready?
+> Is this package well-tested, performance optimized, and 100% production ready?
 
-Well... not really.
 None of the three, probably.
 Tests cover basic functionality but are not exhaustive.
 Performance is decent but could likely be improved, especially for typed serialization via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat).
@@ -169,7 +176,6 @@ But I tried my best to make it potentially safe.
 - Still, when unpacking via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat), the default behavior is to allow arbitrary constructors to be called, which could probably lead to arbitrary code execution.
   This happens because it was hard for me to find a generic way to enforce sound type boundaries when unpacking type parameters that are values (e.g., how do I find out that the `N` in `Array{N, F}` must be an `Int`? I would be very pleased about hints...).
 - Thus, to make [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat) available in sensitive settings, you can optionally whitelist constructors / types that you trust (see the comments [here](https://tscode.github.io/StructPack.jl/dev/usage/#Exploring-the-Abstract)).
-
 
 > Can I load generic msgpack files?
 
