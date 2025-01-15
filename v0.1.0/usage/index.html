@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Usage · StructPack.jl Documentation</title><meta name="title" content="Usage · StructPack.jl Documentation"/><meta property="og:title" content="Usage · StructPack.jl Documentation"/><meta property="twitter:title" content="Usage · StructPack.jl Documentation"/><meta name="description" content="Documentation for StructPack.jl Documentation."/><meta property="og:description" content="Documentation for StructPack.jl Documentation."/><meta property="twitter:description" content="Documentation for StructPack.jl Documentation."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">StructPack.jl Documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Overview</a></li><li class="is-active"><a class="tocitem" href>Usage</a><ul class="internal"><li><a class="tocitem" href="#Custom-packing"><span>Custom packing</span></a></li><li><a class="tocitem" href="#Parents-matter"><span>Parents matter</span></a></li><li><a class="tocitem" href="#Context-matters"><span>Context matters</span></a></li><li><a class="tocitem" href="#Contexts:-Case-study"><span>Contexts: Case study</span></a></li><li><a class="tocitem" href="#A-world-without-macros"><span>A world without macros</span></a></li><li><a class="tocitem" href="#Exploring-the-Abstract"><span>Exploring the Abstract</span></a></li></ul></li><li><a class="tocitem" href="../formats/">Formats</a></li><li><a class="tocitem" href="../context/">Context</a></li><li><a class="tocitem" href="../macro/">The @pack macro</a></li><li><a class="tocitem" href="../reference/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Usage</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Usage</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/tscode/StructPack.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/tscode/StructPack.jl/blob/main/docs/src/usage.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Usage"><a class="docs-heading-anchor" href="#Usage">Usage</a><a id="Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Usage" title="Permalink"></a></h1><p>In order to serialize or deserialize a value of type <code>T</code> via StructPack.jl, a format must be specified. A format is a singleton subtype of <a href="../formats/#StructPack.Format"><code>Format</code></a>. This can either happen by explicitly providing it when calling <a href="../reference/#StructPack.pack"><code>pack</code></a> and <a href="../reference/#StructPack.unpack"><code>unpack</code></a>, or by setting a default format via overloading <a href="../reference/#StructPack.format"><code>format</code></a>. Different formats might have different requirements for <code>T</code>.</p><p>A number of basic julia types already have a default format associated to them and can be packed / unpacked without further instructions.</p><pre><code class="language-julia hljs">using StructPack
+
+str = &quot;This is a string&quot; # StringFormat by default
+tup = (&quot;tuple&quot;, 5, false) # VectorFormat by default
+ntup = (a = str, b = tup) # StructFormat by default
+
+bytes = pack(ntup)
+unpack(bytes, typeof(ntup))
+
+# or alternatively 
+
+io = IOBuffer()
+pack(io, ntup)
+seekstart(io)
+unpack(io, typeof(ntup))</code></pre><p>When <code>using StructPack</code> is issued, the functions <a href="../reference/#StructPack.pack"><code>pack</code></a> and <a href="../reference/#StructPack.unpack"><code>unpack</code></a>, the macro <a href="../macro/#StructPack.@pack"><code>@pack</code></a>, and a set of built-in formats is exported.</p><p>The type information passed to <a href="../reference/#StructPack.unpack"><code>unpack</code></a> is needed, since no such information is stored in <code>bytes</code>. If it is left out, <code>Pack.unpack(bytes)</code> tries to load <code>bytes</code> as generic msgpack object and returns a dictionary (since <code>ntup</code> is stored in the msgpack map format). We will <a href="#Exploring-the-abstract">later</a> see how type information can be stored as well, enabling generic unpacking.</p><h2 id="Custom-packing"><a class="docs-heading-anchor" href="#Custom-packing">Custom packing</a><a id="Custom-packing-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-packing" title="Permalink"></a></h2><p>StructPack.jl gives you several out-of-the-box options how to serialize a custom structure.</p><pre><code class="language-julia hljs">struct MyStruct
+  a::Float64
+  b::String
+end
+
+StructPack.format(::Type{MyStruct}) = MapFormat()
+# or
+StructPack.format(::Type{MyStruct}) = StructFormat()
+# or
+StructPack.format(::Type{MyStruct}) = UnorderedStructFormat()
+# or
+StructPack.format(::Type{MyStruct}) = VectorFormat()
+
+bytes = pack(MyStruct(0., &quot;a string&quot;))</code></pre><p>In the first three cases, the binary <code>bytes</code> will coincide. The difference lies in the unpacking: <a href="../formats/#StructPack.MapFormat"><code>MapFormat</code></a> will (by default) not check if the keys in bytes confirm to <code>:a</code> and <code>:b</code>. <a href="../formats/#StructPack.StructFormat"><code>StructFormat</code></a>, on the other hand, will perform such a consistency check. <a href="../formats/#StructPack.UnorderedStructFormat"><code>UnorderedStructFormat</code></a> will also perform such a check. It is slower but can unpack msgpack binaries where the order of the entries are altered.</p><pre><code class="language-julia hljs">bytes1 = pack((a = 0., b = &quot;a string&quot;)) # coincides with bytes
+bytes2 = pack((ab = 0., ba = &quot;a string&quot;))
+bytes3 = pack((b = 0., a = &quot;a string&quot;))
+
+# All of these will work as intended
+unpack(bytes1, MyStruct, MapFormat())
+unpack(bytes1, MyStruct, StructFormat())
+unpack(bytes1, MyStruct, UnorderedStructFormat())
+
+# This will fail for StructFormat and UnorderedStructFormat
+unpack(bytes2, MyStruct, MapFormat())
+
+# This will not work as intended for MapFormat and will fail for StructFormat
+unpack(bytes3, MyStruct, UnorderedStructFormat())</code></pre><p>If you choose <a href="../formats/#StructPack.VectorFormat"><code>VectorFormat</code></a>, the keys <code>:a</code> and <code>:b</code> are not stored at all in <code>bytes</code>. Unpacking then only relies on the order of the arguments. In particular, <code>pack(MyStruct(0., &quot;b&quot;), VectorFormat()) == pack([0., &quot;b&quot;])</code>.</p><p>To make the specification of default formats more convenient, StructPack.jl also provides the macro <a href="../macro/#StructPack.@pack"><code>@pack</code></a>.</p><pre><code class="language-julia hljs">@pack MyStruct in StructFormat
+# is equivalent to
+StructPack.format(::Type{MyStruct}) = StructFormat()</code></pre><p>This macro has additional benefits: If you do not want to store all fields of MyStruct, or use a specific constructor when unpacking, you can easily inform <a href="../macro/#StructPack.@pack"><code>@pack</code></a> in combination with <a href="../formats/#StructPack.StructFormat"><code>StructFormat</code></a> or <a href="../formats/#StructPack.UnorderedStructFormat"><code>UnorderedStructFormat</code></a>.</p><pre><code class="language-julia hljs"># Special constructor we want to use during unpacking
+MyStruct(a; b) = MyStruct(a, b)
+@pack MyStruct in StructFormat (a; b)
+
+# or
+
+# We only want to serialize the field a
+MyStruct(a) = MyStruct(a, &quot;b is always the same&quot;)
+@pack MyStruct in StructFormat (a,)</code></pre><p>With a bit of additional code we have even more flexibility. For example, after we have decided to store only the field <code>MyStruct.a::Float64</code> anyway, we could just directly use <a href="../formats/#StructPack.FloatFormat"><code>FloatFormat</code></a>.</p><pre><code class="language-julia hljs">StructPack.format(::Type{MyStruct}) = FloatFormat()
+StructPack.destruct(val::MyStruct, ::FloatFormat) = val.a
+StructPack.construct(val::MyStruct, a, ::FloatFormat) = MyStruct(a)</code></pre><p>The functions <a href="../reference/#StructPack.destruct"><code>destruct</code></a> and <a href="../reference/#StructPack.construct"><code>construct</code></a> are called before packing and after unpacking. Consult the docstrings of the various in-built formats to learn about their respective requirements for these functions.</p><h2 id="Parents-matter"><a class="docs-heading-anchor" href="#Parents-matter">Parents matter</a><a id="Parents-matter-1"></a><a class="docs-heading-anchor-permalink" href="#Parents-matter" title="Permalink"></a></h2><p>StructPack.jl strives to be flexible when handling custom structs. In particular, it disagrees that a given value <code>val::T</code> should always be serialized in the same way, independent of the circumstances.</p><p>There are two primary mechanism to enforce context-dependent customizations when packing and unpacking <code>val</code>: Via its parent structure, or via <a href="../context/#Context"><code>Context</code></a> objects.</p><p>Here is a simple example where a field (the child) of a struct (the parent) receives a non-default format.</p><pre><code class="language-julia hljs">struct MyOtherStruct
+  a::String           # Default format is StringFormat
+  b::Vector{Float32}  # Default format is VectorFormat
+end
+
+# We decide that MyStruct.b should rather be stored as binary vector
+@pack MyOtherStruct in StructFormat [b in BinVectorFormat]</code></pre><p>The auxiliary format <a href="../formats/#StructPack.BinVectorFormat"><code>BinVectorFormat</code></a> causes that <code>MyOtherStruct.b</code> will be stored in the msgpack binary format. Without further effort, this only works for types <code>Vector{F}</code> where <code>isbitstype(F)</code> is true.</p><p>Note that this call to <a href="../macro/#StructPack.@pack"><code>@pack</code></a> can be combined with the specification of a particular constructor (as above).</p><h2 id="Context-matters"><a class="docs-heading-anchor" href="#Context-matters">Context matters</a><a id="Context-matters-1"></a><a class="docs-heading-anchor-permalink" href="#Context-matters" title="Permalink"></a></h2><p>Another way to modify the format of a given value <code>val::T</code> are context objects, realized as singleton subtypes of <a href="../context/#Context"><code>Context</code></a>. Context objects are particularly useful if you desired to change how <code>val::T</code> is serialized throughout (a part of) your code, but are reluctant to modify the global behavior for all values of type <code>T</code>. For example, <code>T</code> might belong to a third party package and you do not want to mess with its packing defaults.</p><pre><code class="language-julia hljs">struct MyContext &lt;: StructPack.Context end
+
+# Under MyContext, MyOtherStruct.b is packed in ArrayFormat
+# and the field order does not matter for unpacking
+@pack MyContext MyOtherStruct in UnorderedStructFormat [b in ArrayFormat]
+
+value = MyOtherStruct(&quot;Is my data stored in binary?&quot;, rand(Float32, 10))
+bytes1 = pack(value, MyContext()) # ArrayFormat is used for field b
+bytes2 = pack(value)              # BinVectorFormat is used for field b
+
+# Unpacking must also get informed about the context
+unpack(bytes1, MyOtherStruct, MyContext())
+unpack(bytes2, MyOtherStruct)</code></pre><p>Here you have encountered <a href="../formats/#StructPack.ArrayFormat"><code>ArrayFormat</code></a>. This auxiliary format is able to store and recover (multidimensional) arrays by also storing the array size (see also <a href="../formats/#StructPack.BinArrayFormat"><code>BinArrayFormat</code></a>).</p><p>For convenience, it is also possible to temporarily alter the default context for a block of code via the scoped value <a href="../reference/#StructPack.context"><code>context</code></a>.</p><pre><code class="language-julia hljs">using Base.ScopedValues
+
+with(StructPack.context=&gt;MyContext()) do
+  bytes = pack(value) # ArrayFormat is used
+  unpack(bytes, MyOtherStruct)
+end</code></pre><p>Contexts can reach into and alter nearly each aspect of the serialization, as they penetrate into each packing related call (<a href="../reference/#StructPack.pack"><code>pack</code></a>, <a href="../reference/#StructPack.unpack"><code>unpack</code></a>, <a href="../reference/#StructPack.format"><code>format</code></a>, ...). In general, to add a custom rule for your context, you can just overload the respective function with a trailing argument for the context. For example, the following are equivalent:</p><pre><code class="language-julia hljs">@pack MyContext MyOtherStruct in StructFormat
+# and
+StructPack.format(::Type{MyOtherStruct}, ::MyContext) = StructFormat()</code></pre><p><a href="#A-world-without-macros">Below</a>, we discuss in more detail which functions are commonly overloaded when employing the <a href="../macro/#StructPack.@pack"><code>@pack</code></a> macro. </p><h2 id="Contexts:-Case-study"><a class="docs-heading-anchor" href="#Contexts:-Case-study">Contexts: Case study</a><a id="Contexts:-Case-study-1"></a><a class="docs-heading-anchor-permalink" href="#Contexts:-Case-study" title="Permalink"></a></h2><p>As mentioned above, contexts are useful to prevent the following uglyness: You want to serialize a type <code>B.A</code> from a package <code>B</code> in another way than the maintainers of package <code>C</code> want to serialize <code>B.A</code>. In general, the rule is to never set global default formats for types that you do not own. Always use the parent-mechanism or a dedicated context for such types.</p><p>However, the main reason why I have included contexts into StructPack.jl is a different one. Imagine you want to save and load project files that capture some aspect of a program you are developing (think of a save state in a game). The first version, v1, might correspond directly to your project structure.</p><pre><code class="language-julia hljs">struct Project
+  a::String
+  b::Int
+  c::Float64
+end
+
+@pack Project in StructFormat
+
+saveproject(path, p::Project) = open(path, &quot;w&quot;) do io
+  pack(io, p)
+end
+
+loadproject(path) = open(path, &quot;r&quot;) do io
+  unpack(io, Project)
+end
+
+saveproject(&quot;myproject.pack&quot;, Project(&quot;test&quot;, 5, 0.))</code></pre><p>Great! For version v2, however, you add a new feature and your project structure changes. It now looks like this:</p><pre><code class="language-julia hljs">struct Project
+  c::Float64
+  b::Tuple{Int, Int}
+  a::String
+  d::Bool
+end</code></pre><p>What to do with your now defunct project file <code>myproject.pack</code>? Of course, you could make up a mock structure <code>ProjectV1</code> that mirrors the old format and provides a conversion function. Or you could just unpack <code>myproject.pack</code> as a dictionary and convert it back to a struct. </p><p>In complicated settings, however, both of these options are cumbersome. This is especially true if several structs (that may be children of <code>Project</code>) change, maybe only slightly. You then either have to keep slight variations of countles struct copies around, or have to plow your way through nested dicts. The same horror continues with the next version v3.</p><p>Here, contexts in concert with the <a href="../macro/#StructPack.@pack"><code>@pack</code></a> macro become very useful.</p><pre><code class="language-julia hljs">struct CompatV1V2 &lt;: StructPack.Context end
+
+v1_to_v2(a, b, c) = Project(c, (b, b), a, false)
+
+@pack CompatV1V2 Project in StructFormat v1_to_v2(a, b::Int, c)
+
+loadproject_v2(path) = open(path, &quot;r&quot;) do io
+  unpack(io, Project, CompatV1V2())
+end
+
+p = loadproject_v2(&quot;myproject.pack&quot;)</code></pre><p>Note that the context <code>CompatV1V2</code> is &quot;ill-defined&quot;, in that you cannot pack and consequtively unpack an object of type <code>Project</code> in it (since we had to lie about the type of <code>Project.b</code>, which is ignored by packing but respected by unpacking). However, we only need it for loading anway.</p><p>The value of this approach might not be too apparent in this simple example, but its composability pays when <code>Project</code> contains nested custom structs. In fact, we could even handle renamed fields quite principled by specializing <a href="../reference/#StructPack.fieldnames"><code>StructPack.fieldnames</code></a> given the context <code>CompatV1V2</code>.</p><h2 id="A-world-without-macros"><a class="docs-heading-anchor" href="#A-world-without-macros">A world without macros</a><a id="A-world-without-macros-1"></a><a class="docs-heading-anchor-permalink" href="#A-world-without-macros" title="Permalink"></a></h2><p>How does the <a href="../macro/#StructPack.@pack"><code>@pack</code></a> macro work? Under the hood, it just overloads relevant packing functions. This means that every effect achievable via <a href="../macro/#StructPack.@pack"><code>@pack</code></a> can quite easily be achieved without macro as well, albeit at the cost of more code.</p><p>For example, the macro call</p><pre><code class="language-julia hljs">@pack C A in StructFormat (a, c::Tc; b) [b in Fb]</code></pre><p>is essentially expanded to</p><pre><code class="language-julia hljs">StructPack.format(::Type{A}, ::C) = StructFormat()
+
+StructPack.destruct(val::A, ::C) = (val.a, val.c, val.b)
+
+function StructPack.construct(::Type{A}, pairs, ::C)
+  args = (pairs[1][2], pairs[2][2])
+  kwargs = (pairs[3],)
+  A(args...; kwargs...)
+end
+
+StructPack.fieldnames(::Type{A}, ::C) = (:a, :c, :b)
+
+function StructPack.fieltypes(::Type{A}, ::C)
+  # This is actually solved via a generated function, so the calls to fieldtype
+  # take place before compile time
+  (fieldtype(A, :a), Tc, fieldtype(A, :b))
+end
+
+function StructPack.fieldformats(::Type{A}, ::C)
+  (DefaultFormat(), DefaultFormat(), Fb())
+end</code></pre><h2 id="Exploring-the-Abstract"><a class="docs-heading-anchor" href="#Exploring-the-Abstract">Exploring the Abstract</a><a id="Exploring-the-Abstract-1"></a><a class="docs-heading-anchor-permalink" href="#Exploring-the-Abstract" title="Permalink"></a></h2><p>Until now, we have only considered unpacking when we knew the concrete type of our object beforehand. This implies heavy limitations. For example, what would we do in the following situation?</p><pre><code class="language-julia hljs">abstract type Vehicle end
+
+struct Boat &lt;: Vehicle
+  a::Int
+end
+
+struct Train &lt;: Vehicle
+  b::Float64
+end
+
+struct Ticket
+  price::Float64
+  vehicle::Vehicle
+end</code></pre><p>Here we have to call <code>unpack(..., Vehicle)</code> at some point, which clearly does not tell us about the underlying msgpack layout beforehand. To resolve this issue, it is necessary that some type information is stored alongside the value.</p><p>In StructPack.jl, this problem is solved via the special auxiliary format <a href="../formats/#StructPack.TypedFormat"><code>TypedFormat</code></a>.</p><pre><code class="language-julia hljs">@pack {&lt;: Vehicle} in TypedFormat{StructFormat}
+
+bytes = pack(Boat(42)) # This will be a lot of bytes...
+unpack(bytes, Vehicle) # ... but this will work!</code></pre><p>Now, packing a value of type <code>Vehicle</code> will actually store a msgpack map with the two keys <code>:type</code> and <code>:value</code>, the first of which contains type information sufficient to reconstruct the concrete type. The value stored behind the key <code>:value</code> will be formatted in <a href="../formats/#StructPack.StructFormat"><code>StructFormat</code></a>.</p><p>This is very convenient. However, you should realize that we approach potentially dangerous territory here. This is true in at least two respects:</p><ul><li>The performance of packing and unpacking suffers considerably when using <a href="../formats/#StructPack.TypedFormat"><code>TypedFormat</code></a>. This means that you should probably avoid storing lots and lots of values in this format. </li><li>Unpacking in <a href="../formats/#StructPack.TypedFormat"><code>TypedFormat</code></a> is potentially unsafe, since arbitrary constructors could be triggered. Care is taken that <code>eval</code> is never called, and that the type in question is a subtype of <code>Vehicle</code>, <strong>BUT</strong> when storing and restoring type parameters (e.g., the <code>F</code> in <code>Vector{F}</code>), the default behavior is that <strong>any type</strong> could be reconstructed, meaning that <strong>any constructor</strong> could be called if malicious data is unpacked in this format.</li></ul><p>The second of these issue (arbitrary constructor evaluation) is arguably better than plain old arbitrary code execution, but it is still unacceptable in sensitive settings. For that reason, the user is given fine grained control about which constructors are allowed to be executed via the scoped value <a href="../reference/#StructPack.whitelist"><code>whitelist</code></a>.</p><p>For example, when you call</p><pre><code class="language-julia hljs">using ScopedValues
+
+with(StructPack.whitelist=&gt;[Vehicle])
+  unpack(bytes, Vehicle)
+end</code></pre><p>only the <a href="../reference/#StructPack.construct"><code>construct</code></a> routines of subtypes of <code>Vehicle</code> are allowed when performing unpacking in <a href="../formats/#StructPack.TypedFormat"><code>TypedFormat</code></a>. Alternatively, whitelists can also be defined via singleton subtypes of <a href="../reference/#StructPack.Whitelist"><code>Whitelist</code></a> in combination with <a href="../reference/#StructPack.whitelisted"><code>whitelisted</code></a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Overview</a><a class="docs-footer-nextpage" href="../formats/">Formats »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Wednesday 15 January 2025 12:19">Wednesday 15 January 2025</span>. Using Julia version 1.11.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
