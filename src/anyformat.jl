@@ -7,7 +7,7 @@ Note that custom contexts (see [`Context`](@ref)) are ignored by
 
 !!! note
 
-    msgpack extensions and the date format are currently not supported by
+    The msgpack timestamp format is currently not supported by
     [`AnyFormat`](@ref).
 """
 struct AnyFormat <: Format end
@@ -38,6 +38,8 @@ function peekformat(io)
     VectorFormat()
   elseif isformatbyte(byte, MapFormat())
     MapFormat()
+  elseif isformatbyte(byte, AnyExtensionFormat())
+    AnyExtensionFormat()
   else
     byteerror(byte, AnyFormat())
   end

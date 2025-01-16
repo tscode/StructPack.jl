@@ -9,8 +9,9 @@ include("pack.jl")
 # Auxiliary type for unpacking msgpack vector / map formats
 include("generator.jl")
 
-# Supported packing formats
+# Supported packing / unpacking formats
 include("coreformats.jl")
+include("extensionformat.jl")
 include("anyformat.jl")
 include("dynamicformats.jl")
 include("structformat.jl")

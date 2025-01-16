@@ -92,6 +92,20 @@ end
 const context = ScopedValue{Context}(DefaultContext())
 
 """
+Error that is thrown when Packing fails due to unexpected data.
+"""
+struct PackError <: Exception
+  msg::String
+end
+
+"""
+    packerror(msg)
+
+Throw a [`PackError`](@ref) with message `msg`.
+"""
+packerror(msg) = throw(PackError(msg))
+
+"""
 Error that is thrown when unpacking fails due to unexpected data.
 """
 struct UnpackError <: Exception
@@ -104,6 +118,17 @@ end
 Throw an [`UnpackError`](@ref) with message `msg`.
 """
 unpackerror(msg) = throw(UnpackError(msg))
+
+"""
+    byteerror(byte, format)
+
+Throw an error indicating that `byte` is not compatible with `format`.
+"""
+function byteerror(byte, ::F) where {F <: Format}
+  unpackerror("Invalid format byte $byte when unpacking value in format $F")
+  return
+end
+
 
 """
     format(T::Type [, ctx::Context])::Format

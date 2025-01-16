@@ -5,16 +5,7 @@
 Check if `byte` is compatible with `format`.
 """
 function isformatbyte(byte, ::Format)
-  return error("No format byte is specified for this core format")
-end
-
-"""
-    byteerror(byte, format)
-
-Throw an error indicating that `byte` is not compatible with `format`.
-"""
-function byteerror(byte, ::F) where {F <: Format}
-  unpackerror("Invalid format byte $byte when unpacking value in format $F")
+  error("No format byte is specified for this core format")
   return
 end
 
@@ -181,7 +172,7 @@ function pack(io::IO, value, ::SignedFormat, ::Context)::Nothing
     write(io, 0xd3)
     write(io, Int64(x) |> hton)
   else
-    ArgumentError("invalid signed integer $x") |> throw
+    packerror("Invalid signed integer $x")
   end
   return nothing
 end
@@ -271,7 +262,7 @@ function pack(io::IO, value, ::UnsignedFormat, ::Context)::Nothing
     write(io, 0xcf)
     write(io, UInt64(x) |> hton)
   else
-    ArgumentError("invalid unsigned integer $x") |> throw
+    packerror("Invalid unsigned integer $x")
   end
   return nothing
 end
@@ -413,7 +404,7 @@ function pack(io::IO, value, ::StringFormat, ::Context)::Nothing
     write(io, 0xdb)
     write(io, UInt32(n) |> hton)
   else
-    ArgumentError("Invalid string length $n") |> throw
+    packerror("Invalid string length $n")
   end
   write(io, str)
   return nothing
@@ -491,10 +482,10 @@ function pack(io::IO, value, ::BinaryFormat, ::Context)::Nothing
     write(io, 0xc6)
     write(io, UInt32(n) |> hton)
   else
-    ArgumentError("invalid binary length $n") |> throw
+    packerror("Invalid binary length $n")
   end
   write(io, bin)
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::BinaryFormat, ::Context)::Vector{UInt8}
@@ -576,7 +567,7 @@ function writeheaderbytes(io::IO, val, ::VectorFormat)
     write(io, 0xdd)
     write(io, UInt32(n) |> hton)
   else
-    ArgumentError("invalid vector length $n") |> throw
+    packerror("Invalid vector length $n")
   end
 end
 
@@ -691,7 +682,7 @@ function writeheaderbytes(io::IO, val, ::MapFormat)
     write(io, 0xdf)
     write(io, UInt32(n) |> hton)
   else
-    ArgumentError("invalid map length $n") |> throw
+    packerror("Invalid map length $n")
   end
 end
 
