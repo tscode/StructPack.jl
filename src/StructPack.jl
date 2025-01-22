@@ -1,8 +1,5 @@
 module StructPack
 
-# Pack currently uses the scoped values StructPack.context
-using Base.ScopedValues
-
 # Interface and abstract type definitions
 include("pack.jl")
 
@@ -54,10 +51,8 @@ export Format,
 export pack, unpack
 export @pack
 
-public Context
-public context
-public construct, destruct
-public valuetype, valueformat, keytype, keyformat
-public fieldtypes, fieldnames, fieldformats
+@static if VERSION >= v"1.11"
+  include("public.jl")
+end
 
 end # module StructPack

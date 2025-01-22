@@ -76,20 +76,37 @@ package.
 """
 struct DefaultContext <: Context end
 
-"""
-Scoped value that captures the active context.
+@static if VERSION >= v"1.11"
+  using Base.ScopedValues
 
-To pack / unpack in a given context `ctx::Context`, you can use this pattern:
-```julia
-using Base.ScopedValues
+  @doc """
+  Scoped value that captures the active context.
 
-with(StructPack.context => ctx) do
-  # Do your packing / unpacking without passing ctx explicitly
-  # ...
+  To pack / unpack in a given context `ctx::Context`, you can use this pattern:
+  ```julia
+  using Base.ScopedValues
+
+  with(StructPack.context => ctx) do
+    # Do your packing / unpacking without passing ctx explicitly
+    # ...
+  end
+  ```
+  !!! info
+  
+      Prior to julia 1.11, this constant was a global reference.
+  """
+  const context = ScopedValue{Context}(DefaultContext())
+else
+  @doc """
+  Reference that captures the active context.
+
+  !!! info
+  
+      Starting with julia 1.11, this constant is a scoped value.
+  """
+  const context = Ref{Context}(DefaultContext())
 end
-```
-"""
-const context = ScopedValue{Context}(DefaultContext())
+
 
 """
 Error that is thrown when Packing fails due to unexpected data.
@@ -191,8 +208,8 @@ Create a binary msgpack representation of `value` according to the given format
 `fmt`. If a stream `io` is passed, the representation is written into it.
 
 If no format is provided, it is derived from the type of `value` via
-`format(typeof(value), ctx)`. The context defaults to the scoped value
-[`context`](@ref).
+`format(typeof(value), ctx)`. The context defaults to the value of
+[`context`](@ref), which is a scoped value in julia 1.11 or newer and a reference else.
 
 If both a format and a context is provided, `fmt` is used for packing `value`
 while `ctx` is passed along to deeper packing related calls.

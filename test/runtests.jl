@@ -2,15 +2,12 @@
 using StructPack
 using Test
 using Random
-using Base.ScopedValues
 using Logging
 
 function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat(), ctx = StructPack.DefaultContext())
-  with(StructPack.context => ctx) do
-    bytes = pack(value, fmt)
-    uvalue = unpack(bytes, T, fmt)
-    return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt))
-  end
+  bytes = pack(value, fmt, ctx)
+  uvalue = unpack(bytes, T, fmt, ctx)
+  return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt, ctx))
 end
 
 struct A
