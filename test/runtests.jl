@@ -21,6 +21,7 @@ struct A
 end
 
 A(c, d; b) = A(nothing, b, c, d)
+A(; a = nothing, b, c, d) = A(a, b, c, d)
 
 struct B
   a :: Int
@@ -122,10 +123,10 @@ end
   end
 end
 
-@testset "Structs" begin
+@testset "StructFormats" begin
   val = A(nothing, "test", (10, 10.), false)
 
-  for fmt in [MapFormat(), VectorFormat(), DynamicMapFormat(), DynamicVectorFormat(), StructFormat(), UnorderedStructFormat()]
+  for fmt in [MapFormat(), VectorFormat(), DynamicMapFormat(), StructFormat(), UnorderedStructFormat(), FlexibleStructFormat()]
     @test packcycle(val, fmt = fmt)
   end
 
@@ -133,11 +134,17 @@ end
 
   StructPack.format(::Type{A}) = StructFormat()
   @test packcycle(val)
-end
 
-@testset "StructFormats" begin
+  # Specifically test flexible structs
+  val2 = (f = 0, b = "test", d = false, c = (10, 10.), e = "irrelevant")
+  bytes = pack(val2)
+  for fmt in [MapFormat(), DynamicMapFormat(), DynamicVectorFormat(), StructFormat(), UnorderedStructFormat()]
+    @test_throws StructPack.UnpackError unpack(bytes, A, fmt)
+  end
+  @test unpack(bytes, A, FlexibleStructFormat()) == val
+
+  # Specifically test unordered structs
   val = B(5, 0., "test")
-
   bytes = pack((a = 5, c = "test", b = 0.))
   @test_throws StructPack.UnpackError unpack(bytes, B, StructFormat())
   @test val == unpack(bytes, B, UnorderedStructFormat())
@@ -152,6 +159,9 @@ end
   @test packcycle(val)
   @test packcycle(val, ctx = C1())
   @test length(pack(val, C1())) < length(pack(val))
+  bytes = pack(val, C1())
+  @test bytes == pack(val, SetContextFormat{C1}())
+  @test isequal(val, unpack(bytes, A, SetContextFormat{C1}()))
 end
 
 @testset "Macro" begin
@@ -213,5 +223,16 @@ end
   StructPack.valueformat(::Type{C}, index, ::VectorFormat) = TypedFormat()
   @test packcycle(val, fmt = StructFormat())
   @test packcycle(val, fmt = VectorFormat())
+end
+
+@testset "Extensions" begin
+  for len in [1:10; 2^7; 2^8] 
+    data = rand(UInt8, len)
+    bytes = pack(data, ExtensionFormat{3}())
+    ext = unpack(bytes, StructPack.AnyExtensionFormat())
+    @test ext isa StructPack.ExtensionData
+    @test ext.type == 3
+    @test ext.data == data
+  end
 end
 

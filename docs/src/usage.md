@@ -166,6 +166,8 @@ with(StructPack.context=>MyContext()) do
   unpack(bytes, MyOtherStruct)
 end
 ```
+Furthermore, you can even switch the active context during packing / unpacking via the special format [`SetContextFormat`](@ref).
+
 Contexts can reach into and alter nearly each aspect of the serialization, as they penetrate into each packing related call ([`pack`](@ref), [`unpack`](@ref), [`format`](@ref), ...).
 In general, to add a custom rule for your context, you can just overload the respective function with a trailing argument for the context.
 For example, the following are equivalent:
@@ -174,8 +176,7 @@ For example, the following are equivalent:
 # and
 StructPack.format(::Type{MyOtherStruct}, ::MyContext) = StructFormat()
 ```
-[Below](#A-world-without-macros), we discuss in more detail which functions are commonly overloaded when employing the [`@pack`](@ref) macro. 
-
+[Below](#A-world-without-macros), we discuss in more detail which functions are overloaded when employing the [`@pack`](@ref) macro. 
 
 ## Contexts: Case study
 

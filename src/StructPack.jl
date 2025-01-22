@@ -17,6 +17,7 @@ include("dynamicformats.jl")
 include("structformat.jl")
 include("arrayformats.jl")
 include("typedformat.jl")
+include("specialformats.jl")
 
 # Supported julia types
 include("basetypes.jl")
@@ -33,6 +34,7 @@ export Format,
        UnsignedFormat,
        StringFormat,
        BinaryFormat,
+       ExtensionFormat,
        AbstractVectorFormat,
        VectorFormat,
        DynamicVectorFormat,
@@ -41,11 +43,13 @@ export Format,
        DynamicMapFormat,
        StructFormat,
        UnorderedStructFormat,
+       FlexibleStructFormat,
        ArrayFormat,
        BinVectorFormat,
        BinArrayFormat,
        TypeFormat,
-       TypedFormat
+       TypedFormat,
+       SetContextFormat
 
 export pack, unpack
 export @pack

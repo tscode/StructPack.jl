@@ -1,6 +1,6 @@
 
 """
-Umbrella type for [`StructFormat`](@ref) and [`UnorderedStructFormat`](@ref).
+Umbrella type for [`StructFormat`](@ref), [`UnorderedStructFormat`](@ref), and [`FlexibleStructFormat`](@ref).
 """
 abstract type AbstractStructFormat <: AbstractMapFormat end
 
@@ -111,9 +111,9 @@ function unpack(io::IO, ::Type{T}, fmt::StructFormat, ctx::Context)::T where {T}
   names = fieldnames(T, ctx)
   fmts = fieldformats(T, ctx)
   types = fieldtypes(T, ctx)
-  @assert n == length(fmts) == length(types) """
-  Unexpected number of fields encountered.
-  """
+  if !(n == length(fmts) == length(types))
+    unpackerror("Unexpected number of fields encountered.")
+  end
   pairs = map(names, fmts, types) do name, fmt_val, type_val
     key = unpack(io, Symbol, StringFormat(), ctx)
     if key != name 
@@ -148,9 +148,9 @@ function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, ctx::Context)::T 
   names = fieldnames(T, ctx)
   fmts = fieldformats(T, ctx)
   types = fieldtypes(T, ctx)
-  @assert n == length(fmts) == length(types) """
-  Unexpected number of fields encountered.
-  """
+  if !(n == length(fmts) == length(types))
+    unpackerror("Unexpected number of fields encountered.")
+  end
   pairs = Vector{Pair{Symbol}}(undef, n)
   for index in 1:n
     key = unpack(io, Symbol, StringFormat())
@@ -170,3 +170,41 @@ function unpack(io::IO, ::Type{T}, fmt::UnorderedStructFormat, ctx::Context)::T 
   end
   return construct(T, pairs, fmt, ctx)
 end
+
+
+"""
+Modification of [`StructFormat`](@ref).
+
+When unpacking a value in map format, this format ignores superfluous fields and supports reading only a subset of the fields of a struct.
+
+By default, the keyword argument based constructor `T(; pairs...)` is used when
+unpacking a type `T` in [`FlexibleStructFormat`](@ref), where `pairs` denotes
+the entries unpacked from the msgpack map.
+"""
+struct FlexibleStructFormat <: AbstractStructFormat end
+
+function unpack(io::IO, ::Type{T}, fmt::FlexibleStructFormat, ctx::Context)::T where {T}
+  n = readheaderbytes(io, MapFormat())
+  names = fieldnames(T, ctx)
+  fmts = fieldformats(T, ctx)
+  types = fieldtypes(T, ctx)
+  pairs = Pair{Symbol}[]
+  for index in 1:n
+    key = unpack(io, Symbol, StringFormat())
+    index = findfirst(isequal(key), names)
+    if isnothing(index)
+      # The key does not correspond to a fieldname of T. Skip the value.
+      # TODO: implement actual skipping of a msgpack value
+      unpack(io, AnyFormat())
+    else
+      # The key does correspond to a fieldname of T. Add it to pairs.
+      fmt_val = fmts[index]
+      type_val = types[index]
+      value = unpack(io, type_val, fmt_val, ctx)
+      push!(pairs, key=>value)
+    end
+  end
+  return construct(T, pairs, fmt, ctx)
+end
+
+construct(T::Type, pairs, ::FlexibleStructFormat) = T(; pairs...)

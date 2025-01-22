@@ -12,7 +12,7 @@ extensiontype(data::ExtensionData) = data.type
 """
 Auxiliary format used to unpack generic extension data.
 
-This format cannot be used for packing.
+This format cannot be used for packing since the extension type is ambiguous.
 """
 struct AnyExtensionFormat <: Format end
 
@@ -111,7 +111,7 @@ end
 
 function unpack(io::IO, ::AnyExtensionFormat, ctx::Context)::ExtensionData
   byte = read(io, UInt8)
-  n = if byte == 0xd4 # fixext 1
+  if byte == 0xd4 # fixext 1
     n = 1
     type = read(io, Int8)
   elseif byte == 0xd5 # fixext 2
@@ -138,7 +138,7 @@ function unpack(io::IO, ::AnyExtensionFormat, ctx::Context)::ExtensionData
   else
     byteerror(byte, AnyExtensionFormat)
   end
-  return ExtensionData{type}(read(io, n))
+  return ExtensionData(type, read(io, n))
 end
 
 function unpack(io::IO, ::ExtensionFormat{I}, ctx::Context)::ExtensionData{I} where {I}

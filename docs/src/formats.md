@@ -9,7 +9,7 @@ CurrentModule = StructPack
 Format
 ```
 
-## Basic Formats
+## Basic formats
 
 ```@docs
 NilFormat
@@ -19,11 +19,12 @@ UnsignedFormat
 FloatFormat
 StringFormat
 BinaryFormat
+ExtensionFormat
 ```
 
-## Vector and Array Formats
+## Vector and array formats
 
-Besides [`VectorFormat`](@ref), which mirrors the msgpack vector format, StructPack.jl also provides convenience formats for storing isbits-vectors and multidimensional arrays.
+Besides [`VectorFormat`](@ref), which directly mirrors the msgpack vector format, StructPack.jl also provides convenience formats for storing isbits-vectors and multidimensional arrays.
 
 ```@docs
 AbstractVectorFormat
@@ -34,9 +35,9 @@ BinArrayFormat
 DynamicVectorFormat
 ```
 
-## Map Formats
+## Map formats
 
-Besides the format [`MapFormat`](@ref), which mirrors the msgpack map format, StructPack.jl also provides specialized map implementations for structures.
+Besides [`MapFormat`](@ref), which directly mirrors the msgpack map format, StructPack.jl also provides specialized map implementations for structures.
 
 ```@docs
 AbstractMapFormat
@@ -45,20 +46,20 @@ DynamicMapFormat
 AbstractStructFormat
 StructFormat
 UnorderedStructFormat
+FlexibleStructFormat
 ```
 
-## Extra Formats
+## Type formats
 
 ```@docs
 TypeFormat
 TypedFormat
 ```
 
-## Special Formats
+## Special formats
 
 ```@docs
 DefaultFormat
 AnyFormat
+SetContextFormat
 ```
-
-
