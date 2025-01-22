@@ -1,6 +1,7 @@
 # StructPack.jl
 
-[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://tscode.github.io/StructPack.jl/)
+[![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://tscode.github.io/StructPack.jl/stable/)
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://tscode.github.io/StructPack.jl/dev/)
 [![Build Status](https://github.com/tscode/StructPack.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/tscode/StructPack.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 This [julia](https://julialang.org) package is for people who want to efficiently serialize their beloved structures in a simple, flexible, and transparent way.
@@ -21,7 +22,7 @@ On the other hand, StructPack.jl is (probably) not the right choice if you
 - have enormous files and need lazy loading capabilities.
 - want to read arbitrary msgpack files from external sources.
 
-While the functionality to read generic msgpack is included (currently without support for extensions), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
+While the functionality to read generic msgpack is included (currently without support for the [timestamp extensions](https://github.com/msgpack/msgpack/blob/master/spec.md#timestamp)), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
 
 ## Installation
 You can install StructPack.jl from the general julia registry.
@@ -184,8 +185,13 @@ The special format enabling this under the hood is the [`AnyFormat`](https://tsc
  
 > What about msgpack files that do not exactly fit my struct? Can I load them?
 
-It depends. There are different possibilites to approach this.
-- If you know the layout differences beforehand, because you want to load an old serialization of an updated struct, for example, you can use contexts together with [`@pack`](https://tscode.github.io/StructPack.jl/dev/macro) to go quite far with this. See [here](https://tscode.github.io/StructPack.jl/dev/usage/#Contexts:-Case-study).
-- If you know that all struct fields will be there, but the sorting may be off, you can use [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat).
-- If you do not know beforhand if some of the fields are missing / superfluous, there is no format that currently handles this out of the box.
-  If you need, it, however, it should be simple to define a `FlexibleStructFormat <: StructFormat` that essentially copies [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat) and (1) removes the field consistency checks and (2) uses a keyword argument based construct function by default.
+It depends.
+
+You probably look for [`FlexibleStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat) or [`UnorderedStructFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.UnorderedStructFormat) (if you know that all struct fields will be present, but the sorting may be off).
+
+If the key names in the file differ from the struct field names, you will have to come up with an own solution that uses contexts together with a custom implementation of `StructPack.fieldnames` for loading.
+
+If the actual values in the file differ from the struct field values, on the other hand, a different approach is needed.
+In this case, if you know the type differences beforehand, you can use contexts together with [`@pack`](https://tscode.github.io/StructPack.jl/dev/macro) to go quite far.
+See [here](https://tscode.github.io/StructPack.jl/dev/usage/#Contexts:-Case-study).
+
