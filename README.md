@@ -22,7 +22,7 @@ On the other hand, StructPack.jl is (probably) not the right choice if you
 - have enormous files and need lazy loading capabilities.
 - want to read arbitrary msgpack files from external sources.
 
-While the functionality to read generic msgpack is included (currently without support for the [timestamp extensions](https://github.com/msgpack/msgpack/blob/master/spec.md#timestamp)), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
+While the functionality to read generic msgpack is included (currently without support for the [timestamp](https://github.com/msgpack/msgpack/blob/master/spec.md#timestamp-extension-type) extension type), you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
 
 ## Installation
 You can install StructPack.jl from the general julia registry.
@@ -30,8 +30,8 @@ You can install StructPack.jl from the general julia registry.
 using Pkg
 Pkg.add("StructPack")
 ```
-Since some of its functionality depends on scoped values, it currently requires a julia version of 1.11 or newer.
-This might be relaxed if there is demand.
+A julia version of 1.9 or newer is needed.
+Support for the scoped value [`StructPack.context`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.context) requires version 1.11 or newer.
 
 ## Usage
 To pack or unpack a value `val::T` via StructPack.jl, you must assign its type `T` a format `F <: Format`.
