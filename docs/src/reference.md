@@ -44,15 +44,11 @@ TypedValue
 
 ## Typed format
 ```@docs
-typeparamtype
-typeparamformat
-Whitelist
-PermissiveWhitelist
-whitelisted
+typeparamtypes
+typeparamformats
 ```
 
 ## Scoped values
 ```@docs
 context
-whitelist
 ```

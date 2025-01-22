@@ -171,11 +171,11 @@ I will patiently be waiting for corresponding issues and pull requests.
 > Can I trust you that [`unpack`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.unpack) does not destroy my computer and the internet?
 
 Certainly not!
-But I tried my best to make it potentially safe.
-- StructPack.jl never calls `eval`.
-- Still, when unpacking via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat), the default behavior is to allow arbitrary constructors to be called, which could probably lead to arbitrary code execution.
-  This happens because it was hard for me to find a generic way to enforce sound type boundaries when unpacking type parameters that are values (e.g., how do I find out that the `N` in `Array{N, F}` must be an `Int`? I would be very pleased about hints...).
-- Thus, to make [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat) available in sensitive settings, you can optionally whitelist constructors / types that you trust (see the comments [here](https://tscode.github.io/StructPack.jl/dev/usage/#Exploring-the-Abstract)).
+But StructPack.jl tries its best to be safe.
+In particular, it never calls `eval`.
+The most sensitive operation is unpacking via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat), where runtime-dependent constructors are called.
+By default, it is checked that these constructors actually fit the abstract type to be unpacked.
+Nevertheless, in situations where you do not understand the subtypes well, it is in principle possible that more or less arbitrary code is executed.
 
 > Can I load generic msgpack files?
 

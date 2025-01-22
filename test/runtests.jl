@@ -3,6 +3,7 @@ using StructPack
 using Test
 using Random
 using Base.ScopedValues
+using Logging
 
 function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat(), ctx = StructPack.DefaultContext())
   with(StructPack.context => ctx) do
@@ -28,9 +29,11 @@ struct B
 end
 
 struct C
-  a :: Tuple
+  a :: Array
   b :: AbstractString
 end
+
+struct D end
 
 @testset "AnyFormat" begin
   val = Dict(
@@ -182,10 +185,25 @@ end
 end
 
 @testset "TypedFormat" begin
-  val = rand(Int64, 10)
+  # This has to fail since no base format for D is specified
+  StructPack.format(::Type{D}) = TypedFormat()
+  with_logger(NullLogger()) do
+    @test_throws StructPack.PackError pack(D())
+  end
+  # This, in contrast, has to work
+  @test packcycle(D(), Any, fmt = TypedFormat{StructFormat}())
+
+  # This has to fail since the type parameters of `Array` have not been typed
+  val = rand(5, 5)
+  @test_throws StructPack.PackError pack(val, TypedFormat())
+  StructPack.typeparamtypes(::Type{<: Array}) = (Type, Int)
   @test packcycle(val, Array, fmt = TypedFormat())
 
-  val = C((2, "test", (1e18, 5)), "This is a test")
+  function Base.isequal(c1::C, c2::C)
+    typeof(c1.a) == typeof(c2.a) && c1.a == c2.a && c1.b == c2.b
+  end
+
+  val = C(rand(2, 2), "This is a test")
   @test !packcycle(val, fmt = StructFormat())
   @test !packcycle(val, fmt = VectorFormat())
   StructPack.fieldformats(::Type{C}) = (TypedFormat(), TypedFormat())
@@ -195,7 +213,5 @@ end
   StructPack.valueformat(::Type{C}, index, ::VectorFormat) = TypedFormat()
   @test packcycle(val, fmt = StructFormat())
   @test packcycle(val, fmt = VectorFormat())
-
-  @test packcycle(val, Any, fmt = TypedFormat{StructFormat}())
 end
 

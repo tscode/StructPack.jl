@@ -1,87 +1,35 @@
 
 """
-Whitelist type.
+    typeparamtypes(T::Type [, ctx::Context])
 
-A whitelist can be activated via assigning a whitelist object (or a list of
-types) to the scoped value [`StructPack.whitelist`](@ref).
+Return the types of the type parameters of `T` when packing / unpacking under
+`ctx`.
+
+If `T` has type parameters, this method **must** be implemented for packing /
+unpacking types via [`TypeFormat`](@ref) and [`TypedFormat`](@ref).
 """
-abstract type Whitelist end
-
-"""
-    whitelisted(w, T::Type)
-
-Check whether calling constructors of `T` is permitted according to the
-whitelist `w`.
-"""
-whitelisted(::Whitelist, ::Type) = false
-whitelisted(types::Vector{Type}, T::Type) = any(S -> T <: S, types)
-
-"""
-Default whitelist that permits any constructor when unpacking in [`TypedFormat`](@ref).
-"""
-struct PermissiveWhitelist <: Whitelist end
-
-whitelisted(::PermissiveWhitelist, ::Type) = true
-
-"""
-Scoped value that captures the active whitelist.
-
-It can either be of type [`Whitelist`](@ref), configurable via overloading
-[`whitelisted`](@ref), or a vector of accepted (super-)types.
-
-It defaults to an instance of [`PermissiveWhitelist`](@ref).
-
-For example, it can be employed as follows:
-
-```julia
-using Base.ScopedValues
-
-with(StructPack.whitelist => [T1, T2, ...])
-  # All unpacking in TypedFormat in this block can only
-  # construct subtypes of T1, T2, ...
-  # ...
+function typeparamtypes(T::Type)
+  packerror("No type parameter types have been specified for type $T.")
 end
-```
-"""
-const whitelist = ScopedValue{Union{Whitelist, Vector{Type}}}(
-  PermissiveWhitelist()
-)
+
+typeparamtypes(T::Type, ::Context) = typeparamtypes(T)
 
 """
-    typeparamtype(T::Type, index , ::Format[, ::Context])
+    typeparamformats(T::Type [, ctx::Context])
 
-Return the type of the `index`-th type parameter of `T`.
+Return the formats of the type parameters of `T` when packing / unpacking under
+`ctx`.
 
-Defaults to `Any`.
+Defaults to `DefaultFormat()` for each type parameter.
 
 This method is consulted when packing / unpacking types via [`TypeFormat`](@ref)
-and [`TypedFormat`](@ref). It can be used to insert information about the type
-parameters of `T`.
+and [`TypedFormat`](@ref).
 """
-typeparamtype(T::Type, index, ::Format) = Any
-
-function typeparamtype(T::Type, index, fmt::Format, ::Context)
-  return typeparamtype(T, index, fmt)
+function typeparamformats(::Type{T}) where {T}
+  ntuple(_ -> DefaultFormat(), length(typeparamtypes(T)))
 end
 
-"""
-    typeparamformat(T::Type, index, fmt::Format [, ctx::Context])
-
-Return the type param format of the `index`-th type parameter of `T`
-
-Defaults to `TypedFormat()`.
-
-This method is consulted when packing / unpacking types via [`TypeFormat`](@ref)
-and [`TypedFormat`]. It can be used to insert information about the type
-parameters of `T`.
-
-This method is called by `valueformat(TypeParams{T}, fmt, index, ctx)`.
-"""
-typeparamformat(::Type, index, ::Format) = TypedFormat()
-
-function typeparamformat(T::Type, index, fmt::Format, ::Context)
-  return typeparamformat(T, index, fmt)
-end
+typeparamformats(T::Type, ::Context) = typeparamformats(T)
 
 """
 Auxiliary structure that expresses the parameters of a parametric type in a
@@ -93,12 +41,20 @@ end
 
 format(::Type{<:TypeParams}) = VectorFormat()
 
-function valuetype(::Type{TypeParams{T}}, index, fmt::Format, ctx::Context) where {T}
-  return typeparamtype(T, index, fmt, ctx)
+function valuetype(::Type{TypeParams{T}}, index, ::VectorFormat, ctx::Context) where {T}
+  types = typeparamtypes(T, ctx)
+  @assert index <= length(types) """
+  Too few type parameter types have been specified for type $T.
+  """
+  return types[index]
 end
 
-function valueformat(::Type{TypeParams{T}}, index, fmt::Format, ctx::Context) where {T}
-  return typeparamformat(T, index, fmt, ctx)
+function valueformat(::Type{TypeParams{T}}, index, ::VectorFormat, ctx::Context) where {T}
+  formats = typeparamformats(T, ctx)
+  @assert index <= length(formats) """
+  Too few type parameter formats have been specified for type $T.
+  """
+  return formats[index]
 end
 
 destruct(t::TypeParams, ::VectorFormat) = t.params
@@ -174,21 +130,44 @@ function valuetype(::Type{TypeValue}, state, ::DynamicMapFormat)
   end
 end
 
+function Base.show(io::IO, ::MIME"text/plain", val::TypeValue)
+  print("TypeValue($(composetype(val)))")
+end
+
 """
 Format that is used for packing types.
 
-In order to pack and unpack a type `T::Type` in `TypeFormat`, you have to make
-sure that `t = TypeValue(T)` and `composetype(t)` work as intended.
+In order to pack and unpack a type `T::Type` in `TypeFormat`, make sure that
+`t = StructPack.TypeValue(T)` works and that `StructPack.composetype(t)`
+successfully reconstructs `T`.
+
+If `T` has type parameters, their serialization can be influenced via the
+functions [`typeparamtypes`](@ref) and [`typeparamformats`](@ref).
+
+By default, all type parameters are packed / unpacked in [`TypedFormat`](@ref).
 """
 struct TypeFormat <: Format end
 
-function pack(io::IO, value, ::TypeFormat, ctx::Context)
-  pack(io, TypeValue(value), DynamicMapFormat(), ctx)
+function pack(io::IO, value, fmt::TypeFormat, ctx::Context)
+  val = destruct(value, fmt, ctx)
+  pack(io, val, DynamicMapFormat(), ctx)
 end
 
 function unpack(io::IO, ::TypeFormat, ctx::Context)
-  t = unpack(io, TypeValue, DynamicMapFormat(), ctx)
-  return composetype(t)
+  unpack(io, TypeValue, DynamicMapFormat(), ctx)
+end
+
+format(::Type{<: Type}) = TypeFormat()
+destruct(T::Type, ::TypeFormat) = TypeValue(T)
+
+function construct(::Type{R}, val::TypeValue, ::TypeFormat) where {R}
+  T = composetype(val)
+  if !(T isa R) 
+    unpackerror("""
+    Expected ::$R when upacking value in TypeFormat. Found $T.
+    """)
+  end
+  return T
 end
 
 """
@@ -210,7 +189,16 @@ end
 TypeValue(val) = TypeValue(typeof(val))
 
 function composetype(value::TypeValue)::Type
-  T = Main
+  # When a type parameter that is a type (like Int) is saved via TypedValue,
+  # the typed value that is stored is `TypeValue`.
+  # Therefore, StructPack.TypedValue gets stored
+  path = value.path
+  if !isempty(path) && path[1] == "StructPack"
+    T = StructPack
+    path = path[2:end]
+  else
+    T = Main
+  end
   for m in value.path
     T = getfield(T, m)::Module
   end
@@ -256,13 +244,6 @@ function valuetype(::Type{TypedValue{T, F}}, state, ::DynamicMapFormat) where {T
     @assert S <: T """
     Encountered the unexpected type $S when unpacking a typed value of type $T.
     """
-    @assert whitelisted(whitelist[], S) """
-    Packing or unpacking a typed value encountered type $T, which is not
-    whitelisted under the current whitelist $(whitelist[]).
-    
-    If you expect and trust this type during unpacking, you can update the
-    whitelist to enable support.
-    """
     return S
   end
 end
@@ -279,16 +260,37 @@ struct TypedFormat{F <: Format} <: Format end
 
 TypedFormat() = TypedFormat{DefaultFormat}()
 
-function pack(io::IO, value, ::TypedFormat{F}, ctx::Context) where {F <: Format}
+function _checkrecursion(T::Type, fmt::Format, ctx::Context)
+  if fmt == DefaultFormat() && format(T, ctx) isa TypedFormat
+    @error """
+    Recursive typed format detected.
+
+    This probably means that you have specified TypedFormat without an \
+    underlying base format as the default format for a type.
+    To prevent this, only ever use TypedFormat{F} with a given base format F \
+    when defining default formats.
+
+    For example, `@pack {<: A} in TypedFormat` or `@pack {<: A} in TypedFormat{DefaultFormat}` \
+    will not work, while `@pack {<: A} in TypedFormat{StructFormat}` is okay.
+    """
+    packerror("Recursive typed packing detected")
+  end
+end
+
+function pack(io::IO, value::T, ::TypedFormat{F}, ctx::Context) where {T, F <: Format}
+  _checkrecursion(T, F(), ctx)
   pack(io, TypedValue{F}(value), DynamicMapFormat(), ctx)
 end
 
 function unpack(io::IO, T::Type, ::TypedFormat{F}, ctx::Context) where {F <: Format}
-  tval = unpack(io, TypedValue{T, F}, DynamicMapFormat(), ctx)
-  @assert tval.value isa T """
-  Expected value type $T when unpacking typed value. Found $(typeof(tval.value)).
-  """
-  return tval.value
+  _checkrecursion(T, F(), ctx)
+  tv = unpack(io, TypedValue{T, F}, DynamicMapFormat(), ctx)
+  if !(tv.value isa T)
+    unpackerror("""
+    Expected value type $T when unpacking typed value. Got $(typeof(tv.value)).
+    """)
+  end
+  return tv.value
 end
 
 function unpack(io::IO, fmt::TypedFormat, ctx::Context = context[])

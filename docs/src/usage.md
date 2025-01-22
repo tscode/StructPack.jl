@@ -313,24 +313,11 @@ unpack(bytes, Vehicle) # ... but this will work!
 Now, packing a value of type `Vehicle` will actually store a msgpack map with the two keys `:type` and `:value`, the first of which contains type information sufficient to reconstruct the concrete type.
 The value stored behind the key `:value` will be formatted in [`StructFormat`](@ref).
 
-This is very convenient. However, you should realize that we approach potentially dangerous territory here.
-This is true in at least two respects:
+This is very convenient.
+However, you should realize that we also approach potential complications.
 
-* The performance of packing and unpacking suffers considerably when using [`TypedFormat`](@ref).
-  This means that you should probably avoid storing lots and lots of values in this format. 
-* Unpacking in [`TypedFormat`](@ref) is potentially unsafe, since arbitrary constructors could be triggered.
-  Care is taken that `eval` is never called, and that the type in question is a subtype of `Vehicle`, **BUT** when storing and restoring type parameters (e.g., the `F` in `Vector{F}`), the default behavior is that **any type** could be reconstructed, meaning that **any constructor** could be called if malicious data is unpacked in this format.
-
-The second of these issue (arbitrary constructor evaluation) is arguably better than plain old arbitrary code execution, but it is still unacceptable in sensitive settings.
-For that reason, the user is given fine grained control about which constructors are allowed to be executed via the scoped value [`whitelist`](@ref).
-
-For example, when you call
-```julia
-using ScopedValues
-
-with(StructPack.whitelist=>[Vehicle])
-  unpack(bytes, Vehicle)
-end
-```
-only the [`construct`](@ref) routines of subtypes of `Vehicle` are allowed when performing unpacking in [`TypedFormat`](@ref).
-Alternatively, whitelists can also be defined via singleton subtypes of [`Whitelist`](@ref) in combination with [`whitelisted`](@ref).
+* The performance of packing and unpacking suffers notably when using [`TypedFormat`](@ref).
+  This means that you should avoid storing lots and lots of values in this format. 
+* Packing and unpacking in [`TypedFormat`](@ref) becomes more complicated when the abstract type (`Vehicle` in the example above) has type parameters, i.e., if we had defined `Vehicle{A, B}`.
+  In this case we also have to serialize `A` and `B` when serializing the type. 
+  Since it seems to be impossible to automatically extract necessary information about `A` and `B` (for example, is `A` a type or a symbol?), this information has to be supplied explicitly via [`typeparamtypes`](@ref) and [`typeparamformats`](@ref).

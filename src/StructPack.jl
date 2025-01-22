@@ -1,6 +1,6 @@
 module StructPack
 
-# Pack currently uses the scoped values StructPack.scope and StructPack.whitelist
+# Pack currently uses the scoped values StructPack.context
 using Base.ScopedValues
 
 # Interface and abstract type definitions
@@ -44,18 +44,16 @@ export Format,
        ArrayFormat,
        BinVectorFormat,
        BinArrayFormat,
+       TypeFormat,
        TypedFormat
 
 export pack, unpack
-
 export @pack
 
 public Context
-
+public context
 public construct, destruct
 public valuetype, valueformat, keytype, keyformat
 public fieldtypes, fieldnames, fieldformats
-       
-public whitelist, context
 
 end # module StructPack
