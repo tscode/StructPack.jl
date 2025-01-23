@@ -16,12 +16,12 @@ You might like this package because it
 - avoids uncontrolled code execution during unpacking.
 - produces sound msgpack files that can be read universally.
 
-On the other hand, StructPack.jl is (probably) not the right choice if you
+On the other hand, StructPack.jl is not the right choice if you
  
-- need to serialize arbitrary julia objects (functions, ...).
+- need to serialize arbitrary julia objects (functions, foreign types, ...).
 - have enormous files and need lazy loading capabilities.
 
-While the functionality to read generic msgpack files is included (currently without support for the [timestamp](https://github.com/msgpack/msgpack/blob/master/spec.md#timestamp-extension-type) extension type) and is viewed as a major design goal of StructPack.jl, you should also consider the excellent package [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for StructPack.jl.
+While the functionality to read generic msgpack files is included (currently without support for the [timestamp](https://github.com/msgpack/msgpack/blob/master/spec.md#timestamp-extension-type) extension type) and is viewed as a major design goal of StructPack.jl, you should also consider the excellent [MsgPack.jl](https://github.com/JuliaIO/MsgPack.jl), which served as inspiration for this package.
 
 ## Installation
 You can install StructPack.jl from the general julia registry.
@@ -34,8 +34,8 @@ Support for the scoped value [`StructPack.context`](https://tscode.github.io/Str
 
 ## Usage
 To pack or unpack a value `val::T` via StructPack.jl, you must assign its type `T` a format `F <: Format`.
-The format determines how the struct is mapped to msgpack.
-StructPack.jl offers a number of convenient formats [out of the box](https://tscode.github.io/StructPack.jl/dev/formats/).
+The format determines how the struct is mapped to a valid msgpack byte sequence.
+StructPack.jl offers a number of useful formats [out of the box](https://tscode.github.io/StructPack.jl/dev/formats/).
 
 Default formats for your type `T` can be specified via
 ```julia
@@ -160,7 +160,7 @@ Thus, this package was born. May it help you.
 
 None of the three, probably.
 Tests cover basic functionality but are not exhaustive.
-Performance is decent but could likely be improved, especially for typed serialization via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat).
+Performance is decent but could likely be improved.
 However, the design should be fixed and the API more or less stable.
 Features that are currently not supported are unlikely to make it into a future release, unless they fit neatly and don't increase code complexity by much.
 
@@ -168,19 +168,22 @@ What will most certainly make it into future releases is a better default suppor
 Support for popular types and standard packages could also rather easily be added via package extensions.
 I will patiently be waiting for corresponding issues and pull requests.
 
-> Can I trust you that [`unpack`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.unpack) does not destroy my computer and the internet?
+> Can I trust you that [`unpack`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.unpack) will not destroy my computer and the internet?
 
 Certainly not!
 But StructPack.jl tries its best to be safe.
 In particular, it never calls `eval`.
 The most sensitive operation is unpacking via [`TypedFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.TypedFormat), where runtime-dependent constructors are called.
 By default, it is checked that these constructors actually fit the abstract type to be unpacked.
-Nevertheless, in situations where you do not understand the subtypes well, it is in principle possible that more or less arbitrary code is executed.
+Nevertheless, in situations where you do not understand the type graph well, and do not know what the constructors are capable of, it is in principle possible that more or less arbitrary code is executed.
 
 > Can I load generic msgpack files?
 
-This should work as long as your file does not make use of extensions of the msgpack format.
-The special format enabling this under the hood is the [`AnyFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.AnyFormat).
+Yes, this should work.
+Just call [`unpack`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.unpack) on the stream without a type or format.
+Under the hood, this is implemented via the special [`AnyFormat`](https://tscode.github.io/StructPack.jl/dev/formats/#StructPack.AnyFormat).
+
+When you need generic unpacking that leaves the ordering in msgpack maps intact (since `Dict` is used by default, the order is lost), drop an issue.
  
 > What about msgpack files that do not exactly fit my struct? Can I load them?
 
