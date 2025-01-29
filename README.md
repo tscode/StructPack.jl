@@ -114,8 +114,8 @@ In this example, `bytes` will be the msgpack equivalent of
   z: {
     type: {
       name: "C",
-      params: [],
       path: ["Main"],
+      params: [],
     },
     value: {
       a: 5,
