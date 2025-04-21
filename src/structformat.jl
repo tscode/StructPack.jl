@@ -194,8 +194,7 @@ function unpack(io::IO, ::Type{T}, fmt::FlexibleStructFormat, ctx::Context)::T w
     index = findfirst(isequal(key), names)
     if isnothing(index)
       # The key does not correspond to a fieldname of T. Skip the value.
-      # TODO: implement actual skipping of a msgpack value
-      unpack(io, AnyFormat())
+      skip(io)
     else
       # The key does correspond to a fieldname of T. Add it to pairs.
       fmt_val = fmts[index]

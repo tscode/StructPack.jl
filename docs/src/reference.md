@@ -52,3 +52,9 @@ typeparamformats
 ```@docs
 context
 ```
+
+## Auxiliary functions
+```@docs
+skip
+step
+```

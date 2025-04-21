@@ -6,21 +6,29 @@ include("pack.jl")
 # Auxiliary type for unpacking msgpack vector / map formats
 include("generator.jl")
 
-# Supported packing / unpacking formats
+# Basic packing / unpacking formats
 include("coreformats.jl")
 include("extensionformat.jl")
 include("anyformat.jl")
+
+# Convenience formats
 include("dynamicformats.jl")
 include("structformat.jl")
 include("arrayformats.jl")
 include("typedformat.jl")
 include("specialformats.jl")
 
-# Supported julia types
+# Support for some basic julia types
 include("basetypes.jl")
 
 # Convenience @pack macro for structs
 include("macro.jl")
+
+# Skipping and stepping convenience functions
+include("skip.jl")
+
+export pack, unpack
+export @pack
 
 export Format,
        DefaultFormat,
@@ -47,9 +55,6 @@ export Format,
        TypeFormat,
        TypedFormat,
        SetContextFormat
-
-export pack, unpack
-export @pack
 
 @static if VERSION >= v"1.11"
   include("public.jl")

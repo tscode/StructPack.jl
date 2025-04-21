@@ -1,4 +1,8 @@
 
+##
+## Auxiliary functions
+##
+
 """
     insert_context!(ex, rex)
 
@@ -91,7 +95,7 @@ Parse the type target expression of the [`@pack`](@ref) macro.
 A type target is either
 - just a type expression `T`. Then `(type = :T, constraint = nothing)` is returned.
 - a subtype selection `{S <: T}`. Then `(type = :S, constraint = :({S <: T}))` is returned.
-- an anonymous subtype selection `{<: T}`. Then `(var = S, constraint = :({\$S <: T}))` is returned, where `S` is a generated symbol.
+- an anonymous subtype selection `{<: T}`. Then `(type = S_gen, constraint = :({\$S_gen <: T}))` is returned, where `S_gen` is a generated symbol.
 
 Returns `nothing` if parsing was unsuccessful.
 """
@@ -208,7 +212,7 @@ function parse_constructor_expr(ex)
   # Split off possible type information
   names_types = map(names) do name
     if name isa Symbol
-      (name, nothing)
+      name=>nothing
     elseif name isa Expr &&
       name.head == :(::) &&
       length(name.args) == 2 &&
@@ -226,6 +230,11 @@ function parse_constructor_expr(ex)
   end
 end
 
+"""
+    code_constructor(target, fieldnames, nkwargs, constructor)
+
+Generate appropriate `destruct` and `construct` method bodies.
+"""
 function code_constructor(target, fieldnames, nkwargs, constructor)
   constructor = isnothing(constructor) ? target.type : constructor
   len = length(fieldnames) - nkwargs
@@ -306,6 +315,11 @@ function parse_fieldformats_expr(ex)
   return nothing
 end
 
+"""
+    code_fields(target, fieldnames, nkwargs, constructor)
+
+Generate appropriate `fieldnames`, `fieldtypes`, and `fieldformats` method bodies.
+"""
 function code_fields(target, fieldnames, types, formats)
   if isnothing(fieldnames)
     fieldnames = :(Base.fieldnames($(target.type)))
@@ -407,7 +421,7 @@ Context` is the type of a context singleton.
 
 ---
 
-    @pack C informat (constructor args...) [field formats...]
+    @pack C informat constructor [field formats...]
 
 Generic packing macro for struct formats.
 
@@ -420,7 +434,7 @@ format type `F <: Format`.
 
 The (optional) constructor expression can take one of the forms
 
-- `(a, ...; b, ...)`, which implies a constructor `T(val_a, ...; c = val_c, ...)`
+- `(a, ...; c, ...)`, which implies a constructor `T(val_a, ...; c = val_c, ...)`
   respectively `S(val_a, ...; c = val_c, ...)` where `{S <: T}` denotes a concrete
   subtype of `T`. The entries `a, b, ...` are expected to correspond to
   valid fieldnames of `T` (respectively `S`).

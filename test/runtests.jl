@@ -233,3 +233,21 @@ end
   end
 end
 
+@testset "Skip" begin
+  val = (
+    (1, 2, 3),
+    "test",
+    (a = 5., b = "B"),
+    true,
+  )
+  io = IOBuffer(pack(val))
+  @test StructPack.step(io) == VectorFormat()
+  @test unpack(io) == [1, 2, 3]
+  StructPack.skip(io)
+  @test StructPack.step(io) == MapFormat()
+  StructPack.skip(io)
+  StructPack.skip(io)
+  @test unpack(io) == "b"
+  @test unpack(io) == "B"
+  @test unpack(io) == true
+end

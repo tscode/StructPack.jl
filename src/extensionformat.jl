@@ -72,9 +72,8 @@ function isformatbyte(byte, ::ExtensionFormat)
   return isformatbyte(byte, AnyExtensionFormat())
 end
 
-function pack(io::IO, value, fmt::ExtensionFormat{I}, ctx::Context)::Nothing where {I}
-  bin = destruct(value, fmt, ctx)
-  n = sizeof(bin)
+function writeheaderbytes(io::IO, val, ::ExtensionFormat{I}) where {I}
+  n = sizeof(val)
   if n == 1 # fixext 1
     write(io, 0xd4)
     write(io, Int8(I))
@@ -105,11 +104,9 @@ function pack(io::IO, value, fmt::ExtensionFormat{I}, ctx::Context)::Nothing whe
   else
     packerror("Invalid extension binary length $n")
   end
-  write(io, bin)
-  return
 end
 
-function unpack(io::IO, ::AnyExtensionFormat, ctx::Context)::ExtensionData
+function readheaderbytes(io::IO, ::AnyExtensionFormat)
   byte = read(io, UInt8)
   if byte == 0xd4 # fixext 1
     n = 1
@@ -138,6 +135,18 @@ function unpack(io::IO, ::AnyExtensionFormat, ctx::Context)::ExtensionData
   else
     byteerror(byte, AnyExtensionFormat)
   end
+  (n, type)
+end
+
+function pack(io::IO, value, fmt::ExtensionFormat{I}, ctx::Context)::Nothing where {I}
+  val = destruct(value, fmt, ctx)
+  writeheaderbytes(io, val, fmt)
+  write(io, val)
+  return
+end
+
+function unpack(io::IO, fmt::AnyExtensionFormat, ctx::Context)::ExtensionData
+  n, type = readheaderbytes(io, fmt)
   return ExtensionData(type, read(io, n))
 end
 

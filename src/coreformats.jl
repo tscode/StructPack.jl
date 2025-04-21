@@ -389,9 +389,8 @@ function isformatbyte(byte, ::StringFormat)
          0xd9 <= byte <= 0xdb # str 8 to 32
 end
 
-function pack(io::IO, value, ::StringFormat, ::Context)::Nothing
-  str = destruct(value, StringFormat())
-  n = sizeof(str)
+function writeheaderbytes(io::IO, val, ::StringFormat)
+  n = sizeof(val)
   if n < 32 # fixstr format
     write(io, 0xa0 | UInt8(n))
   elseif n <= typemax(UInt8) # str 8 format
@@ -406,13 +405,11 @@ function pack(io::IO, value, ::StringFormat, ::Context)::Nothing
   else
     packerror("Invalid string length $n")
   end
-  write(io, str)
-  return nothing
 end
 
-function unpack(io::IO, ::StringFormat, ::Context)::String
+function readheaderbytes(io, fmt::StringFormat)::Int
   byte = read(io, UInt8)
-  n = if 0xa0 <= byte <= 0xbf # fixstr  format
+  if 0xa0 <= byte <= 0xbf # fixstr  format
     byte & 0x1f
   elseif byte == 0xd9 # str 8 format
     read(io, UInt8)
@@ -423,6 +420,17 @@ function unpack(io::IO, ::StringFormat, ::Context)::String
   else
     byteerror(byte, StringFormat())
   end
+end
+
+function pack(io::IO, value, fmt::StringFormat, ::Context)::Nothing
+  val = destruct(value, StringFormat())
+  writeheaderbytes(io, val, fmt)
+  write(io, val)
+  return nothing
+end
+
+function unpack(io::IO, fmt::StringFormat, ::Context)::String
+  n = readheaderbytes(io, fmt)
   return String(read(io, n))
 end
 
@@ -469,9 +477,8 @@ function isformatbyte(byte, ::BinaryFormat)
   return 0xc4 <= byte <= 0xc6
 end
 
-function pack(io::IO, value, ::BinaryFormat, ::Context)::Nothing
-  bin = destruct(value, BinaryFormat())
-  n = sizeof(bin)
+function writeheaderbytes(io::IO, val, ::BinaryFormat)
+  n = sizeof(val)
   if n <= typemax(UInt8) # bin8
     write(io, 0xc4)
     write(io, UInt8(n))
@@ -484,13 +491,11 @@ function pack(io::IO, value, ::BinaryFormat, ::Context)::Nothing
   else
     packerror("Invalid binary length $n")
   end
-  write(io, bin)
-  return
 end
 
-function unpack(io::IO, ::BinaryFormat, ::Context)::Vector{UInt8}
+function readheaderbytes(io::IO, fmt::BinaryFormat)::Int
   byte = read(io, UInt8)
-  n = if byte == 0xc4 # bin8
+  if byte == 0xc4 # bin8
     read(io, UInt8)
   elseif byte == 0xc5 # bin16
     read(io, UInt16) |> ntoh
@@ -499,6 +504,17 @@ function unpack(io::IO, ::BinaryFormat, ::Context)::Vector{UInt8}
   else
     byteerror(byte, BinaryFormat())
   end
+end
+
+function pack(io::IO, value, fmt::BinaryFormat, ::Context)::Nothing
+  val = destruct(value, BinaryFormat())
+  writeheaderbytes(io, val, fmt)
+  write(io, val)
+  return
+end
+
+function unpack(io::IO, fmt::BinaryFormat, ::Context)::Vector{UInt8}
+  n = readheaderbytes(io, fmt)
   return read(io, n)
 end
 
