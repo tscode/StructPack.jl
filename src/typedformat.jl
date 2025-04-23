@@ -8,7 +8,7 @@ Return the types of the type parameters of `T` when packing / unpacking under
 !!! note
 
     If `T` has type parameters, this method **must** be implemented for packing
-    / unpacking types via [`TypeFormat`](@ref) and [`TypedFormat`](@ref).
+    / unpacking types via [`TypeFormat`](@ref) and their values via [`TypedFormat`](@ref).
 """
 function typeparamtypes(T::Type)
   packerror("No type parameter types have been specified for type $T.")

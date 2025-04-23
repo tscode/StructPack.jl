@@ -163,8 +163,8 @@ end
   @test packcycle(val, ctx = C1())
   @test length(pack(val, C1())) < length(pack(val))
   bytes = pack(val, C1())
-  @test bytes == pack(val, SetContextFormat{C1}())
-  @test isequal(val, unpack(bytes, A, SetContextFormat{C1}()))
+  @test bytes == pack(val, ContextFormat{C1}())
+  @test isequal(val, unpack(bytes, A, ContextFormat{C1}()))
 end
 
 @testset "Macro" begin

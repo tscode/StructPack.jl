@@ -61,5 +61,5 @@ TypedFormat
 ```@docs
 DefaultFormat
 AnyFormat
-SetContextFormat
+ContextFormat
 ```

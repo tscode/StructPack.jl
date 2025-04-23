@@ -172,7 +172,7 @@ with(StructPack.context=>MyContext()) do
   unpack(bytes, MyOtherStruct)
 end
 ```
-Furthermore, you can dynamically switch the active context during packing / unpacking via the special format [`SetContextFormat`](@ref).
+Furthermore, you can dynamically switch the active context during packing / unpacking via the special format [`ContextFormat`](@ref).
 Consider the following piece of code.
 ```julia
 struct ParentStruct
@@ -180,14 +180,14 @@ struct ParentStruct
   b::MyOtherStruct # Want to use MyContext for this one
 end
 
-@pack ParentStruct in StructFormat [b in SetContextFormat{MyContext}]
+@pack ParentStruct in StructFormat [b in ContextFormat{MyContext}]
 
 # or, if we also want to change the format for the field b from unordered to ordered
 
-@pack ParentStruct in StructFormat [b in SetContextFormat{MyContext, StructFormat}]
+@pack ParentStruct in StructFormat [b in ContextFormat{MyContext, StructFormat}]
 ```
-Since [`SetContextFormat`](@ref) is a bit unwieldy, the [`@pack`](@ref) macro accepts the abbreviation `F[C]` for `SetContextFormat{C, F}`.
-Thus, the two packing lines in the code above are equvivalent to
+Since [`ContextFormat`](@ref) is a bit unwieldy, the [`@pack`](@ref) macro accepts the abbreviation `F[C]` for `ContextFormat{C, F}`.
+Thus, the two packing lines in the code above are equivalent to
 ```julia
 @pack ParentStruct in StructFormat [b in DefaultFormat[MyContext]]
 @pack ParentStruct in StructFormat [b in StructFormat[MyContext]]

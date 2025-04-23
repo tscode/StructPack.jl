@@ -137,7 +137,7 @@ end
 
 Parse a format expression. A format expression is either a type `F` or
 `F{...}`, or an expression with the syntax `F[C]`, which is translated to
-`SetContextFormat{C, F}`
+`ContextFormat{C, F}`
 """
 function parse_format_expr(ex)
   len = ex isa Symbol ? 0 : length(ex.args)
@@ -150,7 +150,7 @@ function parse_format_expr(ex)
          is_type_expr(ex.args[2])
     return Expr(
       :curly,
-      :(StructPack.SetContextFormat),
+      :(StructPack.ContextFormat),
       ex.args[2],
       ex.args[1],
     )
@@ -564,7 +564,7 @@ Note that no instance of `C` can be passed; an actual type is required.
 This (optional) pattern can be used to set the default format of the type target by specializing the function [`format`](@ref).
 For instance, `@pack T in F` for `F <: Format` will define `StructPack.format(::Type{T}) = F()`.
 
-The special syntax `F[C]`, where `F <: Format` and `C <: Context`, is available as shortcut for `SetContextFormat{C, F}`.
+The special syntax `F[C]`, where `F <: Format` and `C <: Context`, is available as shortcut for `ContextFormat{C, F}`.
 This will mainly be useful for the specification of field and type-parameter formats via `(formats...)`, see below.
 
 ### constructor
@@ -583,8 +583,9 @@ It expects an expression of the form `{A::Ta, B::Tb, ...}`, where the labels
 
 Specification of the type parameter types is necessary if `T` is to be packed / unpacked in [`TypeFormat`](@ref) or a value `val::T` is to be packed / unpacked in [`TypedFormat`](@ref).
 
-As a simple example, consider `@pack Array {::Type, ::Int}`, which enables packing / unpacking array types:
+As a simple example, consider `@pack {<: Array} {::Type, ::Int}`, which enables packing / unpacking of base array types:
 
+    @pack {<: Array} {::Type, ::Int}
     bytes = pack(Array{Float64, 3})
     unpack(bytes, Type) # sucessfully returns Array{Float64, 3}
 

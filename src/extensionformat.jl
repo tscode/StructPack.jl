@@ -24,7 +24,7 @@ end
 """
 Format for supporting the msgpack extension standard.
 
-Built upon the msgpack formats `fixext 1 - 8` and `ext 8 - 32`.
+Built upon the msgpack formats `fixext 1-8` and `ext 8-32`.
 
 ## Defaults
 Use

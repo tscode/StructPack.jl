@@ -55,7 +55,7 @@ export Format,
        BinArrayFormat,
        TypeFormat,
        TypedFormat,
-       SetContextFormat
+       ContextFormat
 
 @static if VERSION >= v"1.11"
   include("public.jl")

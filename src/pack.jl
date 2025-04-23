@@ -19,6 +19,7 @@ msgpack specification:
 - [`FloatFormat`](@ref) (msgpack float32, float64)
 - [`StringFormat`](@ref) (msgpack fixstr, str 8-32),
 - [`BinaryFormat`](@ref) (msgpack bin 16, bin 32).
+- [`ExtensionFormat`](@ref) (msgpack fixext 1-8, ext 8-32)
 
 For vector-like and map-like objects, several built-in formats with different
 benefits and drawbacks are provided as subtypes of
@@ -33,6 +34,7 @@ Additional convenience formats include
 - [`BinArrayFormat`](@ref) (store multidimensional bitstype arrays efficiently),
 - [`TypeFormat`](@ref) (store types)
 - [`TypedFormat`](@ref) (store values and their type for generic unpacking).
+- [`ContextFormat`](@ref) (locally enforce a specific context)
 """
 abstract type Format end
 
