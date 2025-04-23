@@ -48,14 +48,14 @@ end
 format(::Type{<:ArrayValue}) = StructFormat()
 fieldformats(::Type{<:ArrayValue}) = (DefaultFormat(), VectorFormat())
 
-function pack(io::IO, value, ::ArrayFormat, ctx::Context)::Nothing
-  val = destruct(value, ArrayFormat(), ctx)
+function pack(io::IO, value, fmt::ArrayFormat, ctx::Context)::Nothing
+  val = destruct(value, fmt, ctx)
   return pack(io, ArrayValue(size(val), val), ctx)
 end
 
-function unpack(io::IO, ::Type{T}, ::ArrayFormat, ctx::Context)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::ArrayFormat, ctx::Context)::T where {T}
   val = unpack(io, ArrayValue{Generator{T}}, ctx)
-  return construct(T, val, ArrayFormat(), ctx)
+  return construct(T, val, fmt, ctx)
 end
 
 """
@@ -91,14 +91,14 @@ or make sure that the constructor `T(bytes::Vector{UInt8})` is defined.
 """
 struct BinVectorFormat <: Format end
 
-function pack(io::IO, value, ::BinVectorFormat, ctx::Context)::Nothing
-  val = destruct(value, BinVectorFormat(), ctx)
+function pack(io::IO, value, fmt::BinVectorFormat, ctx::Context)::Nothing
+  val = destruct(value, fmt, ctx)
   return pack(io, val, BinaryFormat(), ctx)
 end
 
-function unpack(io::IO, ::Type{T}, ::BinVectorFormat, ctx::Context)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::BinVectorFormat, ctx::Context)::T where {T}
   bytes = unpack(io, BinaryFormat(), ctx)
-  return construct(T, bytes, BinVectorFormat(), ctx)
+  return construct(T, bytes, fmt, ctx)
 end
 
 """
@@ -150,14 +150,14 @@ end
 format(::Type{<:BinArrayValue}) = StructFormat()
 fieldformats(::Type{<:BinArrayValue}) = (DefaultFormat(), BinVectorFormat())
 
-function pack(io::IO, value, ::BinArrayFormat, ctx::Context)
-  val = destruct(value, BinArrayFormat(), ctx)
+function pack(io::IO, value, fmt::BinArrayFormat, ctx::Context)
+  val = destruct(value, fmt, ctx)
   pack(io, BinArrayValue(size(val), val), ctx)
   return
 end
 
-function unpack(io::IO, ::Type{T}, ::BinArrayFormat, ctx::Context)::T where {T}
+function unpack(io::IO, ::Type{T}, fmt::BinArrayFormat, ctx::Context)::T where {T}
   val = unpack(io, BinArrayValue{Vector{UInt8}}, ctx)
-  return construct(T, val, BinArrayFormat(), ctx)
+  return construct(T, val, fmt, ctx)
 end
 

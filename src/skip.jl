@@ -12,11 +12,13 @@ end
 # Specialized skip implementations
 
 function skip(io::IO, ::NilFormat)::Nothing
-  skip(io, 1)
+  Base.skip(io, 1)
+  nothing
 end
 
 function skip(io::IO, ::BoolFormat)::Nothing
-  skip(io, 1)
+  Base.skip(io, 1)
+  nothing
 end
 
 function skip(io::IO, fmt::StringFormat)::Nothing
@@ -48,27 +50,26 @@ function skip(io::IO, fmt::ExtensionFormat)::Nothing
 end
 
 """
-   skip(io)
+    skip(io::IO)
 
-Skip the msgpack value at `io`.
+Skip the msgpack value in `io`.
 """
 function skip(io)
   fmt = peekformat(io)
   skip(io, fmt)
 end
 
-
 """
     step(io::IO)
 
-Take one step in the msgpack value at `io`.
+Enter or skip the msgpack value in `io`.
 
-If the active value is stored in map or vector format, step into it.
+If the value is in map or vector format, step into it.
 Otherwise, skip the element.
 
 Returns the core format of the value skipped or stepped into.
 
-For example, if a msgpack array is stored at `io`, then `step(io); unpack(io)`
+For example, if a msgpack array is stored in `io`, then `step(io); unpack(io)`
 will (generically) unpack the first element of the array.
 """
 function step(io)

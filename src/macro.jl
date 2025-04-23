@@ -114,7 +114,7 @@ function parse_typetarget_expr(ex)
        is_type_expr(ex.args[1])
 
       # {<: T}
-      S = gensym(:S)
+      S = Base.gensym(:S)
       pushfirst!(ex.args, S)
       return (type = S, constraint = ex)
 
@@ -129,7 +129,33 @@ function parse_typetarget_expr(ex)
 
     end
   end  
-  return nothing
+  return
+end
+
+"""
+    parse_format_expr(ex)
+
+Parse a format expression. A format expression is either a type `F` or
+`F{...}`, or an expression with the syntax `F[C]`, which is translated to
+`SetContextFormat{C, F}`
+"""
+function parse_format_expr(ex)
+  len = ex isa Symbol ? 0 : length(ex.args)
+  if is_type_expr(ex)
+    return ex
+
+  elseif len == 2 &&
+         ex.head == :ref &&
+         is_type_expr(ex.args[1]) &&
+         is_type_expr(ex.args[2])
+    return Expr(
+      :curly,
+      :(StructPack.SetContextFormat),
+      ex.args[2],
+      ex.args[1],
+    )
+  end
+  return
 end
 
 """
@@ -137,7 +163,9 @@ end
 
 Parse an expression of the form `T in F`, where `T` is a valid type target (see
 [`parse_typetarget_expr`](@ref)) and `F` is a type expression that corresponds
-to a format.
+to a format (see [`parse_format_expr`](@ref)).
+
+Return a named tuple with entries `target` and `format`.
 """
 function parse_informat_expr(ex)
   if !(ex isa Expr) || ex.head != :call
@@ -146,12 +174,12 @@ function parse_informat_expr(ex)
   len = length(ex.args)
   if len == 3 && ex.args[1] in [:in, :(=>)]
     target = parse_typetarget_expr(ex.args[2])
-    format = parse_typetarget_expr(ex.args[3])
-    if !isnothing(target) && !isnothing(format) && isnothing(format.constraint)
-      return (; target, format = format.type)
+    format = parse_format_expr(ex.args[3])
+    if !isnothing(target) && !isnothing(format)
+      return (; target, format)
     end
   end
-  return nothing
+  return
 end
 
 function code_informat(target, format)
@@ -231,15 +259,32 @@ function parse_constructor_expr(ex)
 end
 
 """
-    code_constructor(target, fieldnames, nkwargs, constructor)
+    code_constructor(target, fieldnames, fieldtypes, nkwargs, constructor)
 
-Generate appropriate `destruct` and `construct` method bodies.
+Generate appropriate `fieldnames`, `fieldtypes`, `destruct`, and `construct`
+method bodies.
 """
-function code_constructor(target, fieldnames, nkwargs, constructor)
+function code_constructor(target, fieldnames, fieldtypes, nkwargs, constructor)
   constructor = isnothing(constructor) ? target.type : constructor
-  len = length(fieldnames) - nkwargs
+  nargs = length(fieldnames) - nkwargs
+  len = length(fieldnames)
 
   return quote
+    function StructPack.fieldnames(::Type{$(target.type)})
+      return $(Tuple(fieldnames))
+    end
+
+    @generated function StructPack.fieldtypes(::Type{$(target.type)})
+      names = $fieldnames
+      texprs = map(names) do key
+        Base.get($fieldtypes, key) do
+          default = Base.fieldtype($(target.type), key)
+          :($default)
+        end
+      end
+      return Expr(:tuple, texprs...)
+    end
+
     function StructPack.destruct(val::$(target.type), fmt::StructPack.AbstractStructFormat)
       Iterators.map($fieldnames) do name
         name=>getfield(val, name)
@@ -247,34 +292,81 @@ function code_constructor(target, fieldnames, nkwargs, constructor)
     end
 
     function StructPack.construct(::Type{$(target.type)}, pairs::Vector, fmt::StructPack.AbstractStructFormat)
-      if length(pairs) != length($fieldnames) 
+      if length(pairs) != $len
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
-      args = Iterators.map(last, @view(pairs[1:$len]))
-      kwargs = @view(pairs[$len+1:end])
+      args = Iterators.map(last, @view(pairs[1:$nargs]))
+      kwargs = @view(pairs[$nargs+1:end])
       $constructor(args...; kwargs...)
     end
 
     function StructPack.construct(::Type{$(target.type)}, pairs::Tuple, fmt::StructPack.AbstractStructFormat)
-      if length(pairs) != length($fieldnames) 
+      if length(pairs) != $len
         unpackerror("Inconsistent number of arguments during unpacking.")
       end
-      args = map(last, pairs[1:(end-$nkwargs)])
-      kwargs = pairs[$len+1:end]
+      args = map(last, pairs[1:$nargs])
+      kwargs = pairs[$nargs+1:end]
       $constructor(args...; kwargs...)
     end
   end
 end
 
 """
-    parse_fieldformat_expr(ex)
+    parse_typeparams_expr(ex)
+
+Parse a type parameter expression of the form `{A::TA, B::TB}`, where the labels
+`A, B, ...` are optional.
+
+Returns a named tuple with fields `names` and `types`, with labels randomly generated if not specified.
+"""
+function parse_typeparams_expr(ex)
+  if !(ex isa Expr && ex.head == :braces)
+    return
+  end
+  pairs = map(ex.args) do arg
+    if arg isa Expr && arg.head == :(::)
+      if length(arg.args) == 1 &&
+         is_type_expr(arg.args[1])
+        Base.gensym(:TP) => arg.args[1]
+      elseif length(arg.args) == 2 &&
+             is_type_expr(arg.args[2]) &&
+             (arg.args[1] isa Symbol) 
+        arg.args[1] => arg.args[2]
+      end
+    end
+  end
+  if all(!isnothing, pairs)
+    return (
+      names = first.(pairs),
+      types = last.(pairs),
+    )
+  end
+end
+
+"""
+    code_typeparams(target, tpnames, tptypes, formats)
+
+Generate appropriate `typeparamtypes` and `typeparamformats` method bodies.
+"""
+function code_typeparams(target, tptypes)
+  return quote
+    @generated function StructPack.typeparamtypes(::Type{$(target.type)})
+      texprs = $tptypes
+      return Expr(:tuple, texprs...)
+    end
+  end
+end
+
+
+"""
+    parse_subformat_expr(ex)
 
 Parse a single field format expression of the form `a in F` or `(a, b, ...)
 in F`.
 
-Returns a vector of pairs `[a=>F, b=>F, ...]`.
+Returns a vector of pairs `[:a=>F, :b=>F, ...]` if successful and `nothing` else.
 """
-function parse_fieldformat_expr(ex)
+function parse_subformat_expr(ex)
   len = ex isa Symbol ? 0 : length(ex.args)
   if len == 3 && ex.args[1] in [:in, :(=>)]
     fieldexpr = ex.args[2]
@@ -287,72 +379,85 @@ function parse_fieldformat_expr(ex)
     else
       return
     end
-    format = parse_typetarget_expr(ex.args[3])
-    if !isnothing(format) && isnothing(format.constraint)
-      return [field => format.type for field in fields]
+    format = parse_format_expr(ex.args[3])
+    if !isnothing(format)
+      return [field => format for field in fields]
     end
   end
   return
 end
 
 """
-    parse_fieldformats_expr(ex)
+    parse_subformats_expr(ex)
 
-Parse a field format expression of the form `[a in Fa, b in Fb, ...]`, where `a`
-and `b` correspond to keys and `Fa`, `Fb` to format types.
+Parse a subformat expression specification of the form `[a in Fa, b in Fb,
+...]`, where `a, b, ...` correspond to labels and `Fa, Fb, ...` to format types.
+
+Return a dictionary mapping labels to their respective format types.
 """
-function parse_fieldformats_expr(ex)
+function parse_subformats_expr(ex)
   if ex isa Expr && ex.head == :vect
     if isempty(ex.args)
       pairs = []
     else
       pairs = mapreduce(vcat, ex.args) do arg
-        parse_fieldformat_expr(arg)
+        # TODO: how to propagate errors here?
+        parse_subformat_expr(arg)
       end
     end
     return Dict(pairs)
   end
-  return nothing
+  return
 end
 
 """
-    code_fields(target, fieldnames, nkwargs, constructor)
+    code_subformats(target, fieldnames, tpnames, formats)
 
-Generate appropriate `fieldnames`, `fieldtypes`, and `fieldformats` method bodies.
+Generate appropriate `fieldformats` and `typeparamformats` method bodies.
 """
-function code_fields(target, fieldnames, types, formats)
-  if isnothing(fieldnames)
-    fieldnames = :(Base.fieldnames($(target.type)))
-  else
-    fieldnames = Tuple(fieldnames)
-  end
-  return quote
+function code_subformats(target, fieldnames, tpnames, formats)
+  statements = []
 
-    function StructPack.fieldnames(::Type{$(target.type)})
-      return $fieldnames
-    end
-
-    @generated function StructPack.fieldtypes(::Type{$(target.type)})
-      names = $fieldnames
-      texprs = map(names) do key
-        Base.get($types, key) do
-          default = Base.fieldtype($(target.type), key)
-          :($default)
+  # Check whether typeparamformats method should be generated
+  gen_tp = !isempty(intersect(keys(formats), tpnames))
+  if gen_tp
+    block = quote
+      @generated function StructPack.typeparamformats(::Type{$(target.type)})
+        names = $tpnames
+        fexprs = map(names) do key
+          F = Base.get($formats, key, :(StructPack.DefaultFormat))
+          Expr(:call, F)
         end
+        return Expr(:tuple, fexprs...)
       end
-      return Expr(:tuple, texprs...)
     end
-
-    @generated function StructPack.fieldformats(::Type{$(target.type)})
-      names = $fieldnames
-      fexprs = map(names) do key
-        F = Base.get($formats, key, :(StructPack.DefaultFormat))
-        Expr(:call, F)
-      end
-      return Expr(:tuple, fexprs...)
-    end
-
+    append!(statements, block.args)
   end
+
+  # Check whether fieldformats method should be generated
+  # This should be done in two cases:
+  #   1) fieldnames have been provided explicitly
+  #   2) even if no fieldnames have been provided, formats that are not
+  #      assigned to type parameter names have been provided.
+  gen_fields = !isnothing(fieldnames) || !isempty(setdiff(keys(formats), tpnames))
+  if gen_fields
+    if isnothing(fieldnames)
+      fieldnames = :(Base.fieldnames($(target.type)))
+    end
+    block = quote
+      @generated function StructPack.fieldformats(::Type{$(target.type)})
+        names = $fieldnames
+        fexprs = map(names) do key
+          F = Base.get($formats, key, :(StructPack.DefaultFormat))
+          Expr(:call, F)
+        end
+        return Expr(:tuple, fexprs...)
+      end
+    end
+    append!(statements, block.args)
+  end
+
+  return Expr(:block, statements...)
 end
 
 """
@@ -362,7 +467,10 @@ Try to consume an optional context type argument for the [`@pack`](@ref) macro.
 Returns the consumed context (if any) and the remaining arguments.
 """
 function consume_context_argument(args)
-  if is_type_expr(args[1])
+  if length(args) >= 2 &&
+     is_type_expr(args[1]) &&
+     (!isnothing(parse_typetarget_expr(args[2])) ||
+      !isnothing(parse_informat_expr(args[2])))
     args[1], args[2:end]
   else
     nothing, args
@@ -388,69 +496,103 @@ function consume_argument(f, args)
 end
 
 function parse_packmacro_arguments(args)
-  ctx, args = consume_context_argument(args)
-  @assert !isempty(args) "Format argument is missing in @pack macro."
-  informat, args = consume_argument(parse_informat_expr, args)
-  @assert !isnothing(informat) "Macro format expression cannot be parsed."
-  cons, args = consume_argument(parse_constructor_expr, args)
-  formats, args = consume_argument(parse_fieldformats_expr, args)
-  @assert isempty(args) "Invalid macro arguments: $args"
+  # Check if the first argument plausably corresponds to a context type
+  oargs = args
+  context, args = consume_context_argument(args)
+  @assert !isempty(args) """
+  @pack: Type target argument is missing.
+  """
+
+  # Check if an isolated type target (WITHOUT default format) is given
+  target, args = consume_argument(parse_typetarget_expr, args)
+
+  if isnothing(target)
+    # No, so check if a type target WITH default format is given
+    informat, args = consume_argument(parse_informat_expr, args)
+    @assert !isnothing(informat) """
+    @pack: Type target cannot be determined.
+    """
+    target = informat.target
+    format = informat.format
+  else
+    format = nothing
+  end
+
+  construct, args = consume_argument(parse_constructor_expr, args)
+  tparams, args = consume_argument(parse_typeparams_expr, args)
+  subformats, args = consume_argument(parse_subformats_expr, args)
+
+  @assert isempty(args) """
+  @pack: The following macro arguments could not be consumed: $args
+  """
+  if all(isnothing, [format, construct, tparams, subformats])
+    str = join(oargs, " ")
+    @warn """
+    The macro call '@pack $str' will be without effect: \
+    No default format, constructor, type parameter, or subformat arguments \
+    were provided (see the documentation for @pack).
+    """
+  end
   return (;
-    ctx,
-    informat,
-    cons,
-    formats,
+    context,
+    target,
+    format,
+    construct,
+    tparams,
+    subformats,
   )
 end
 
 """
-    @pack T in F
-    @pack {<: T} in F
+    @pack [context] target [in format] [(constructor...)] [{type parameters...}] [[formats...]]
 
-Convenience syntax for `StructPack.format(::Type{T}) = F()` respectively
-`StructPack.format(::Type{<: T}) = F()`.
+Convenience macro to generate packing / unpacking code for the types specified
+by `target`.
 
----
+## Arguments
 
-    @pack C T in F
-    @pack C {<: T} in F
+### target
+This argument has to be of the form `T`, `{<: T}`, or `{S <: T}`, where `T` is an existing type and `S` is a variable name that can be reused in the constructor (see below).
+This is the only mandatory argument of [`@pack`](@ref).
 
-Convenience syntax for `StructPack.format(::Type{T}, ::C) = F()`
-respectively `StructPack.format(::Type{<: T}, ::C) = F()`, where `C <:
-Context` is the type of a context singleton.
+### context
+This (optional) argument has to be an existing subtype `C <: Context`, see [`Context`](@ref).
+The generated code will be restricted to this context.
+Note that no instance of `C` can be passed; an actual type is required.
 
----
+### format
+This (optional) pattern can be used to set the default format of the type target by specializing the function [`format`](@ref).
+For instance, `@pack T in F` for `F <: Format` will define `StructPack.format(::Type{T}) = F()`.
 
-    @pack C informat constructor [field formats...]
+The special syntax `F[C]`, where `F <: Format` and `C <: Context`, is available as shortcut for `SetContextFormat{C, F}`.
+This will mainly be useful for the specification of field and type-parameter formats via `(formats...)`, see below.
 
-Generic packing macro for struct formats.
+### constructor
+This (optional) argument affects the functions [`destruct`](@ref), [`construct`](@ref), [`fieldnames`](@ref), and (optionally) [`fieldtypes`](@ref) when a value of type `T` is packed / unpacked in a format `F <: AbstractStructFormat`.
+* It can be a list of (keyword) arguments like `(a, b, ...; c, d, ...)`, in which case the constructor `T` is called with the respective arguments in [`construct`](@ref).
+* It can be function call expression like `f(a, b, ...; c, d, ...)`, in which case the function `f` is called with the respective arguments in [`construct`](@ref).
+In both cases, only the fields `(:a, :b, ..., :c, :d, ...)` are returned by [`fieldnames`](@ref), in this order.
+This also affects which fields are packed via [`destruct`](@ref).
 
-The first expression `C <: Context` is optional.
-The definitions enacted by the macro will be restricted to the context `C()`.
+If type specifications are present (e.g., `(a::Int, b; c::Float64)`), the respective field types returned by [`fieldtypes`](@ref) are overwritten.
 
-The second expression `informat` can be an expression of the form `T in F` or
-`{<: T} in F` for a user specified type `T` and a given
-format type `F <: Format`.
+### type parameters
+This (optional) argument affects the function [`typeparamtypes`](@ref).
+It expects an expression of the form `{A::Ta, B::Tb, ...}`, where the labels
+`A, B, ...` are optional and `Ta, Tb, ...` indicate the type of the respective type parameter.
 
-The (optional) constructor expression can take one of the forms
+Specification of the type parameter types is necessary if `T` is to be packed / unpacked in [`TypeFormat`](@ref) or a value `val::T` is to be packed / unpacked in [`TypedFormat`](@ref).
 
-- `(a, ...; c, ...)`, which implies a constructor `T(val_a, ...; c = val_c, ...)`
-  respectively `S(val_a, ...; c = val_c, ...)` where `{S <: T}` denotes a concrete
-  subtype of `T`. The entries `a, b, ...` are expected to correspond to
-  valid fieldnames of `T` (respectively `S`).
-- `A(a, ...; b, ...)` for a custom constructor object / function `A`. Note that this call to `A` must return an object of type `T` (respectively `S`).
+As a simple example, consider `@pack Array {::Type, ::Int}`, which enables packing / unpacking array types:
 
-The (optional) field format expression is of the form `[a => Fa, b => Fb, ...]`,
-where `a, b, ...` denote fieldnames and `Fa, Fb, ...` the corresponding field
-format. For convenience, it is also possible to specify one format `F` for
-several keys `a, b, ...` via the syntax `[(a, b, ...) in F]`.
+    bytes = pack(Array{Float64, 3})
+    unpack(bytes, Type) # sucessfully returns Array{Float64, 3}
 
-!!! warning
+### formats
+This (optional) argument affects the functions [`fieldformats`](@ref) and [`typeparamformats`](@ref).
+It is expected to be a list of format specifications `[a in Fa, b in Fb, C in FC, ...]`, where the labels `a, b, C, ...` refer to either field names of `T` or type parameter names established in the `{type parameters...}` argument, and where `Fa, Fb, FC, ...` are existing subtypes of `Format` (see `in format` above).
 
-    The constructor and field format customizations that this macro offers
-    are only effectful for `StructFormat` and `UnorderedStructFormat`. Thus,
-    it only works as intended if the specified format `F` is built upon one of these formats
-    (e.g., `F = StructFormat` or `F = TypedFormat{UnorderedStructFormat}`).
+For convenience, the syntax `[(a, b, ...) in F]` translates to `[a in F, b in F, ...]`.
 
 ## Examples
 
@@ -478,34 +620,47 @@ myA(a) = A(a, [], [])
 """
 macro pack(args...)
   r = parse_packmacro_arguments(args)
-  
-  target = r.informat.target
-  format = r.informat.format
-  statements = [code_informat(target, format).args...]
+  statements = []
 
-  if !isnothing(r.cons)
-    names = r.cons.names
-    nkwargs = r.cons.nkwargs
-    constructor = r.cons.constructor
-    block = code_constructor(target, names, nkwargs, constructor)
+  if !isnothing(r.format)
+    block = code_informat(r.target, r.format)
     append!(statements, block.args)
   end
 
-  if !isnothing(r.formats) || !isnothing(r.cons)
-    formats = isnothing(r.formats) ? Dict() : r.formats
-    if isnothing(r.cons)
-      fieldnames = nothing
-      types = Dict()
-    else
-      fieldnames = r.cons.names
-      types = r.cons.types
-    end
-    block = code_fields(target, fieldnames, types, formats)
+  if !isnothing(r.construct)
+    block = code_constructor(
+      r.target,
+      r.construct.names,
+      r.construct.types,
+      r.construct.nkwargs,
+      r.construct.constructor,
+    )
     append!(statements, block.args)
   end
-  
+
+  if !isnothing(r.tparams)
+    block = code_typeparams(
+      r.target,
+      r.tparams.types,
+    )
+    append!(statements, block.args)
+  end
+
+  subformats = isnothing(r.subformats) ? Dict() : r.subformats
+  fieldnames = isnothing(r.construct) ? nothing : r.construct.names
+  tpnames = isnothing(r.tparams) ? [] : r.tparams.names
+
+  block = code_subformats(
+    r.target,
+    fieldnames,
+    tpnames,
+    subformats
+  )
+  append!(statements, block.args)
+
   block = Expr(:block, statements...)
-  inject_context!(block, r.ctx)
-  inject_constraint!(block, target.constraint)
+  inject_context!(block, r.context)
+  inject_constraint!(block, r.target.constraint)
+
   return esc(block)
 end

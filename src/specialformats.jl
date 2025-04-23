@@ -12,7 +12,9 @@ is equivalent to
 
 where the original context `C2 <: Context` is ignored.
 
-This format is for example useful in combination with [`fieldformats`](@ref), to enforce that different fields of a struct can be packed / unpacked with different contexts.
+This format is, for example, useful in combination with [`fieldformats`](@ref),
+to enforce that different fields of a struct can be packed / unpacked with
+different contexts.
 """
 struct SetContextFormat{C<:Context, F<:Format} <: Format end
 

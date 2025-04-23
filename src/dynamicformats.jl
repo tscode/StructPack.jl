@@ -65,7 +65,7 @@ function pack(io::IO, value::T, fmt::DynamicVectorFormat, ctx::Context) where {T
     pack(io, entry, fmt_val, ctx)
     state = iterstate(T, state, entry, fmt, ctx)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::Type{T}, fmt::DynamicVectorFormat, ctx::Context)::T where {T}
@@ -111,7 +111,7 @@ function pack(io::IO, value::T, fmt::DynamicMapFormat, ctx::Context) where {T}
     pack(io, last(entry), fmt_val, ctx)
     state = iterstate(T, state, entry, fmt, ctx)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::Type{T}, fmt::DynamicMapFormat, ctx::Context)::T where {T}

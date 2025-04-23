@@ -4,7 +4,13 @@ using Test
 using Random
 using Logging
 
-function packcycle(value, T = typeof(value); isequal = isequal, fmt = DefaultFormat(), ctx = StructPack.DefaultContext())
+function packcycle(
+  value,
+  T = typeof(value);
+  isequal = isequal,
+  fmt = DefaultFormat(),
+  ctx = StructPack.DefaultContext(),
+)
   bytes = pack(value, fmt, ctx)
   uvalue = unpack(bytes, T, fmt, ctx)
   return isequal(value, uvalue) && all(bytes .== pack(uvalue, fmt, ctx))
@@ -189,6 +195,122 @@ end
   bytes = pack((a = "testing", b = 5, c = 6.5))
   p = unpack(bytes, P, C3())
   @test cons("testing", 5, 6.5) == p
+end
+
+@testset "Macro2" begin
+  struct Ctx1 <: StructPack.Context end
+
+  # -------------------- #
+
+  struct A0 end
+
+  @pack A0 in NilFormat
+  @test StructPack.format(A0) == NilFormat()
+
+  @test packcycle(A0())
+
+  # -------------------- #
+
+  struct A1
+    a::Int
+  end
+
+  @pack A1 in FloatFormat
+  @pack Ctx1 A1 in SignedFormat
+
+  @test StructPack.format(A1) == FloatFormat()
+  @test StructPack.format(A1, Ctx1()) == SignedFormat()
+
+  StructPack.destruct(v::A1, ::FloatFormat) = v.a
+  StructPack.destruct(v::A1, ::SignedFormat, ::Ctx1) = v.a
+
+  @test packcycle(A1(5))
+  @test packcycle(A1(5), ctx = Ctx1())
+
+  # -------------------- #
+
+  struct A3
+    a::A1
+    b::String
+  end
+
+  A3(b::String; a::A1 = A1(5)) = A3(a, b)
+
+  @pack A3 in StructFormat (b; a)
+
+  @test packcycle(A3(A1(5), "test"))
+
+  @test StructPack.format(A3) == StructFormat()
+  @test StructPack.fieldnames(A3) == (:b, :a)
+  @test StructPack.fieldtypes(A3) == (String, A1)
+  @test StructPack.fieldformats(A3) == (DefaultFormat(), DefaultFormat())
+  
+  @pack Ctx1 A3 in UnorderedStructFormat (b::Float64; a) 
+
+  @test StructPack.format(A3, Ctx1()) == UnorderedStructFormat()
+  @test StructPack.fieldnames(A3, Ctx1()) == (:b, :a)
+  @test StructPack.fieldtypes(A3, Ctx1()) == (Float64, A1)
+  @test StructPack.fieldformats(A3, Ctx1()) == (DefaultFormat(), DefaultFormat())
+
+  # -------------------- #
+
+  struct A4
+    a::A1
+    b::String
+  end
+
+  b2(b, a) = A4(a, b)
+
+  @pack A4 in StructFormat
+  @pack A4 b2(b, a) [a in StructFormat]
+
+  @test packcycle(A4(A1(5), "test"))
+  @test StructPack.format(A4) == StructFormat()
+  @test StructPack.fieldnames(A4) == (:b, :a)
+  @test StructPack.fieldtypes(A4) == (String, A1)
+  @test StructPack.fieldformats(A4) == (DefaultFormat(), StructFormat())
+
+  # -------------------- #
+
+  struct A5
+    a::A1
+    b::A1
+  end
+
+  a5val = A5(A1(5), A1(6))
+
+  @pack A5 in StructFormat
+  @test packcycle(a5val)
+  l1 = length(pack(a5val))
+  l3 = length(pack(a5val, Ctx1()))
+
+  @pack A5 [a in DefaultFormat[Ctx1]]
+  @test packcycle(a5val)
+  l2 = length(pack(a5val))
+
+  @test l1 > l2 > l3
+
+  # -------------------- #
+
+  struct A6{F, N}
+    data::Array{F, N}
+  end
+
+  @pack {<: A6} in TypedFormat{StructFormat}
+  @pack {<: A6} {::Type, ::Int}
+  @pack {<: A6} [data in BinArrayFormat]
+  @test packcycle(A6(rand(5, 5)), isequal = (a, b) -> a.data == b.data)
+
+  @test StructPack.typeparamtypes(A6) == (Type, Int)
+  @test StructPack.typeparamformats(A6) == (DefaultFormat(), DefaultFormat())
+  @test StructPack.fieldformats(A6) == (BinArrayFormat(),)
+
+  @pack Ctx1 {<: A6} {T::Type, I::Int} [T in TypeFormat, I in UnsignedFormat]
+  @test packcycle(A6(rand(5, 5)), ctx = Ctx1(), isequal = (a, b) -> a.data == b.data)
+
+  @test StructPack.typeparamtypes(A6, Ctx1()) == (Type, Int)
+  @test StructPack.typeparamformats(A6, Ctx1()) == (TypeFormat(), UnsignedFormat())
+  @test StructPack.fieldformats(A6, Ctx1()) == (BinArrayFormat(),)
 end
 
 @testset "TypedFormat" begin

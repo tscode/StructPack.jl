@@ -44,7 +44,7 @@ end
 
 function pack(io::IO, value, ::NilFormat, ::Context)::Nothing
   write(io, 0xc0)
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::NilFormat, ::Context)::Nothing
@@ -94,13 +94,13 @@ function isformatbyte(byte, ::BoolFormat)
   return byte == 0xc2 || byte == 0xc3
 end
 
-function pack(io::IO, value, ::BoolFormat, ::Context)::Nothing
-  if destruct(value, BoolFormat())
+function pack(io::IO, value, fmt::BoolFormat, ctx::Context)::Nothing
+  if destruct(value, fmt, ctx)
     write(io, 0xc3)
   else
     write(io, 0xc2)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::BoolFormat, ::Context)::Bool
@@ -153,8 +153,8 @@ function isformatbyte(byte, ::SignedFormat)
          0xd0 <= byte <= 0xd3 # signed 8 to 64
 end
 
-function pack(io::IO, value, ::SignedFormat, ::Context)::Nothing
-  x = destruct(value, SignedFormat())
+function pack(io::IO, value, fmt::SignedFormat, ctx::Context)::Nothing
+  x = destruct(value, fmt, ctx)
   if -32 <= x < 0 # negative fixint
     write(io, reinterpret(UInt8, Int8(x)))
   elseif 0 <= x < 128 # positive fixint
@@ -174,7 +174,7 @@ function pack(io::IO, value, ::SignedFormat, ::Context)::Nothing
   else
     packerror("Invalid signed integer $x")
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::SignedFormat, ::Context)::Int64
@@ -245,8 +245,8 @@ function isformatbyte(byte, ::UnsignedFormat)
          0xcc <= byte <= 0xcf # unsigned 8 to 64
 end
 
-function pack(io::IO, value, ::UnsignedFormat, ::Context)::Nothing
-  x = destruct(value, UnsignedFormat())
+function pack(io::IO, value, fmt::UnsignedFormat, ctx::Context)::Nothing
+  x = destruct(value, fmt, ctx)
   if x < 128 # positive fixint
     write(io, UInt8(x))
   elseif x <= typemax(UInt8) # unsigned 8
@@ -264,7 +264,7 @@ function pack(io::IO, value, ::UnsignedFormat, ::Context)::Nothing
   else
     packerror("Invalid unsigned integer $x")
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::UnsignedFormat, ::Context)::UInt64
@@ -323,8 +323,8 @@ function isformatbyte(byte, ::FloatFormat)
   return byte == 0xca || byte == 0xcb
 end
 
-function pack(io::IO, value, ::FloatFormat, ::Context)::Nothing
-  val = destruct(value, FloatFormat())
+function pack(io::IO, value, fmt::FloatFormat, ctx::Context)::Nothing
+  val = destruct(value, fmt, ctx)
   if isa(val, Float16) || isa(val, Float32) # float 32
     write(io, 0xca)
     write(io, Float32(val) |> hton)
@@ -332,7 +332,7 @@ function pack(io::IO, value, ::FloatFormat, ::Context)::Nothing
     write(io, 0xcb)
     write(io, Float64(val) |> hton)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::FloatFormat, ::Context)::Float64
@@ -422,11 +422,11 @@ function readheaderbytes(io, fmt::StringFormat)::Int
   end
 end
 
-function pack(io::IO, value, fmt::StringFormat, ::Context)::Nothing
-  val = destruct(value, StringFormat())
+function pack(io::IO, value, fmt::StringFormat, ctx::Context)::Nothing
+  val = destruct(value, fmt, ctx)
   writeheaderbytes(io, val, fmt)
   write(io, val)
-  return nothing
+  return
 end
 
 function unpack(io::IO, fmt::StringFormat, ::Context)::String
@@ -506,8 +506,8 @@ function readheaderbytes(io::IO, fmt::BinaryFormat)::Int
   end
 end
 
-function pack(io::IO, value, fmt::BinaryFormat, ::Context)::Nothing
-  val = destruct(value, BinaryFormat())
+function pack(io::IO, value, fmt::BinaryFormat, ctx::Context)::Nothing
+  val = destruct(value, fmt, ctx)
   writeheaderbytes(io, val, fmt)
   write(io, val)
   return
@@ -607,7 +607,7 @@ function pack(io::IO, value::T, fmt::VectorFormat, ctx::Context) where {T}
     fmt_val = valueformat(T, state, fmt, ctx)
     pack(io, entry, fmt_val, ctx)
   end
-  return nothing
+  return
 end
 
 function unpack(io::IO, ::Type{T}, fmt::VectorFormat, ctx::Context)::T where {T}

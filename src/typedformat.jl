@@ -5,8 +5,10 @@
 Return the types of the type parameters of `T` when packing / unpacking under
 `ctx`.
 
-If `T` has type parameters, this method **must** be implemented for packing /
-unpacking types via [`TypeFormat`](@ref) and [`TypedFormat`](@ref).
+!!! note
+
+    If `T` has type parameters, this method **must** be implemented for packing
+    / unpacking types via [`TypeFormat`](@ref) and [`TypedFormat`](@ref).
 """
 function typeparamtypes(T::Type)
   packerror("No type parameter types have been specified for type $T.")
