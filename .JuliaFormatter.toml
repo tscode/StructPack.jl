@@ -11,4 +11,4 @@ import_to_using = true
 conditional_to_if = true
 joint_lines_based_on_source = true
 separate_kwargs_with_semicolon = true
-always_use_return = true
+always_use_return = false
