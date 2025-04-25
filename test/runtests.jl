@@ -353,6 +353,15 @@ end
     @test ext.type == 3
     @test ext.data == data
   end
+
+  # Case study for Int128 via ExtensionFormat
+  I = Int8(5)
+
+  StructPack.destruct(x::Int128, ::ExtensionFormat{I}) = reinterpret(UInt8, [x])
+  StructPack.construct(::Type{Int128}, data, ::ExtensionFormat{I}) = reinterpret(Int128, data)[1]
+
+  val = Int128(10)
+  @test packcycle(val, fmt = ExtensionFormat{I}())
 end
 
 @testset "Skip" begin

@@ -57,12 +57,10 @@ or make sure that the constructor `T(::Vector{UInt8})` is defined.
 """
 struct ExtensionFormat{I} <: Format
   function ExtensionFormat{J}() where {J}
-    type = try
-      Int8(J)
-    catch err
-      error("Invalid type indicator $I for ExtensionFormat (requires Int8)")
-    end
-    return new{type}()
+    @assert J isa Int8 """
+    Invalid msgpack extension type $J::$(typeof(J)), expected Int8.
+    """
+    return new{J}()
   end
 end
 
@@ -150,7 +148,7 @@ function unpack(io::IO, fmt::AnyExtensionFormat, ctx::Context)::ExtensionData
   return ExtensionData(type, read(io, n))
 end
 
-function unpack(io::IO, ::ExtensionFormat{I}, ctx::Context)::ExtensionData{I} where {I}
+function unpack(io::IO, ::ExtensionFormat{I}, ctx::Context)::Vector{UInt8} where {I}
   data = unpack(io, AnyExtensionFormat(), ctx)
   if extensiontype(data) != I 
     unpackerror("Expected extension type $I, found $(extensiontype(data)).")

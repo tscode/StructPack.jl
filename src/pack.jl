@@ -249,7 +249,7 @@ function unpack(io::IO, ::Type{T}, ctx::Context = context[])::T where {T}
   return unpack(io, T, format(T, ctx), ctx)
 end
 
-function unpack(io::IO, ::Type{T}, fmt::Format, ctx::Context = context[]) where {T}
+function unpack(io::IO, ::Type{T}, fmt::Format, ctx::Context = context[])::T where {T}
   val = unpack(io, fmt, ctx)
   return construct(T, val, fmt, ctx)
 end

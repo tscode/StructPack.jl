@@ -364,3 +364,27 @@ As a consequence, the ordering of maps is lost and duplicated keys will lead to 
 
 Any valid msgpack value should be correctly unpackable this way.
 Otherwise it is considered a bug of StructPack.jl.
+
+
+## Extensions
+
+Msgpack extensions are implemented via the [`ExtensionFormat`](@ref).
+Here is an example how to pack / unpack values of type `Int128` in this format:
+
+```julia
+I = Int8(5)
+
+function StructPack.destruct(x::Int128, ::ExtensionFormat{I})
+  reinterpret(UInt8, [x])
+end
+
+function StructPack.construct(::Type{Int128}, data, ::ExtensionFormat{I})
+  reinterpret(Int128, data)[1]
+end
+
+val = Int128(10)
+bytes = pack(val, ExtensionFormat{I}())
+unpack(bytes, Int128, ExtensionFormat{I}())
+```
+
+If you unpack a msgpack extension value via the generic [`AnyFormat`](@ref), you will receive an [`ExtensionData`](@ref) object.
