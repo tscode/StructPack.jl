@@ -347,7 +347,7 @@ end
 @testset "Extensions" begin
   for len in [1:10; 2^7; 2^8] 
     data = rand(UInt8, len)
-    bytes = pack(data, ExtensionFormat{3}())
+    bytes = pack(data, ExtensionFormat{Int8(3)}())
     ext = unpack(bytes, StructPack.AnyExtensionFormat())
     @test ext isa StructPack.ExtensionData
     @test ext.type == 3

@@ -1,6 +1,8 @@
 
 """
 Structure holding the type and binary data stored in a msgpack extension object.
+
+Has the fields `type::Int8` and `data::Vector{UInt8}`.
 """
 struct ExtensionData
   type::Int8

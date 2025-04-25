@@ -40,6 +40,7 @@ ArrayValue
 BinArrayValue
 TypeValue
 TypedValue
+ExtensionData
 ```
 
 ## Typed format
